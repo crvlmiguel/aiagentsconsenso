@@ -10,9 +10,10 @@
 .wrap{display:flex;flex-direction:column;height:100%;max-width:440px;margin:0 auto;background:#fff;border:1px solid #E5EAF2;overflow:hidden}
 .hd{background:linear-gradient(135deg,#0069FE 0%,#003F99 100%);color:#fff;padding:18px 18px 22px;display:flex;align-items:center;gap:12px;position:relative}
 .hd::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.15) 1px,transparent 1px);background-size:24px 24px;pointer-events:none}
-.av{width:44px;height:44px;border-radius:50%;background:#EAF2FF;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#0069FE;font-weight:700;font-size:16px;overflow:hidden;position:relative;border:2px solid rgba(255,255,255,.3);z-index:1}
-.av img{width:100%;height:100%;object-fit:cover}
-.av::after{content:"";position:absolute;bottom:-2px;right:-2px;width:12px;height:12px;background:#22c55e;border-radius:50%;border:2px solid #fff}
+.av{width:44px;height:44px;border-radius:50%;background:#EAF2FF;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#0069FE;font-weight:700;font-size:16px;position:relative;border:2px solid rgba(255,255,255,.3);z-index:1}
+.av-inner{width:100%;height:100%;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center}
+.av img{width:100%;height:100%;object-fit:cover;display:block}
+.av .dot{position:absolute;bottom:0;right:0;width:12px;height:12px;background:#22c55e;border-radius:50%;box-shadow:0 0 0 2px #004db3;z-index:2;pointer-events:none}
 .hd .info{z-index:1}
 .hd .name{font-weight:600;font-size:15px;line-height:1.2}
 .hd .st{font-size:11px;opacity:.92;display:flex;align-items:center;gap:4px;margin-top:3px}
@@ -21,8 +22,9 @@
 .msgs{flex:1;overflow-y:auto;padding:18px 14px;display:flex;flex-direction:column;gap:12px;background:#F7F9FC}
 .row{display:flex;gap:8px;align-items:flex-end}
 .row.me{flex-direction:row-reverse}
-.mini{width:26px;height:26px;border-radius:50%;flex-shrink:0;background:#EAF2FF;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#0069FE}
-.mini img{width:100%;height:100%;object-fit:cover}
+.mini{width:26px;height:26px;border-radius:50%;flex-shrink:0;background:#EAF2FF;overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#0069FE;position:relative}
+.mini img{width:100%;height:100%;object-fit:cover;display:block}
+.mini::after,.mini::before{content:none!important;display:none!important}
 .row.me .mini{visibility:hidden}
 .msg{max-width:78%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
 .me .msg{background:#0069FE;color:#fff;border-bottom-right-radius:4px}
@@ -56,7 +58,7 @@
 <body>
 <div class="wrap">
   <div class="hd">
-    <div class="av" id="av">A</div>
+    <div class="av" id="av"><div class="av-inner" id="avInner">A</div><span class="dot" aria-hidden="true"></span></div>
     <div class="info">
       <div class="name" id="agentName">Assistente</div>
       <div class="st">Online</div>
@@ -81,6 +83,7 @@ const msgs = document.getElementById("msgs");
 const f = document.getElementById("f");
 const t = document.getElementById("t");
 const avEl = document.getElementById("av");
+const avInnerEl = document.getElementById("avInner");
 const nameEl = document.getElementById("agentName");
 let agent = { name: "Assistente", avatar_url: "", welcome_message: "Olá! Como posso ajudar?", icebreakers: [] };
 
@@ -183,17 +186,17 @@ async function loadAgent() {
     nameEl.textContent = j.name || "Assistente";
     document.title = (j.name || "Chat") + " · " + (j.tenant_name || "Consenso+");
     if (j.avatar_url) {
-      avEl.innerHTML = "";
+      avInnerEl.innerHTML = "";
       const img = document.createElement("img");
       img.src = j.avatar_url;
-      img.onerror = () => { avEl.textContent = initials(j.name); };
-      avEl.appendChild(img);
+      img.onerror = () => { avInnerEl.textContent = initials(j.name); };
+      avInnerEl.appendChild(img);
     } else {
-      avEl.textContent = initials(j.name);
+      avInnerEl.textContent = initials(j.name);
     }
     botMsg(j.welcome_message || "Olá! Como posso ajudar?", j.icebreakers || [], []);
   } catch (e) {
-    avEl.textContent = "A";
+    avInnerEl.textContent = "A";
     botMsg("Olá! Como posso ajudar?", [], []);
   }
 }
