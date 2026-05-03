@@ -514,7 +514,7 @@ const Agentes = () => {
                               : test?.loading ? "A testar…"
                               : test?.ok ? "Ligado"
                               : test?.error ? "Erro"
-                              : "Ativo · por testar"}
+                              : "Ativo"}
                           </span>
                         </label>
                         {cfg.enabled && ch.k !== "webchat" && (
