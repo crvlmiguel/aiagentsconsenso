@@ -1,7 +1,26 @@
-# Consenso Plus — PRD (v3.0)
+# Consenso Plus — PRD (v3.1)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+
+## v3.1 (2026-05-03) — FIX crítico do widget (script + shortcode)
+
+### Bug corrigido
+**Causa raiz**: o snippet de instalação gerava `<script src="${backendUrl}/widget.js">` (sem `/api`). O ingress Kubernetes encaminha tudo sem `/api` para o frontend React, que devolvia `index.html` em vez do ficheiro JS do widget. Por isso o script "carregava" mas nada acontecia no site do cliente.
+
+### Correções aplicadas
+- Snippet em `Agentes.jsx` passa a usar `${backendUrl}/api/widget.js`
+- Removidas rotas não-prefixadas do backend (`/widget.js`, `/widget/{tid}`) que nunca chegariam ao servidor em produção
+- **widget.js reescrito** com: lazy iframe (carrega apenas ao 1º clique), launcher sempre visível com CSS `!important` (z-index 2147483646), resolução de origin cross-domain a partir do script src, fallback visual se iframe falhar em 8s, API pública `window.ConsensoPlus.{open,close}`
+- Novo endpoint `GET /api/widget-test/{tenant_id}/{agent_id}` → serve página de demonstração que carrega o script real, permitindo ao utilizador testar exatamente o que o cliente verá
+- Novo snippet PHP `functions.php` (alternativa ao plugin WP) no separador Instalação com `data-testid="btn-copy-php"`
+- Novo botão "Abrir página de teste" (`btn-test-real-page`) no separador Instalação
+
+### Verificação end-to-end (iteration_5)
+- [x] Backend 9/9: /api/widget.js devolve application/javascript com CORS `*`
+- [x] /api/widget-test/<tid>/<aid> devolve HTML com tenant/agent IDs
+- [x] Playwright: ícone aparece, clicar abre iframe, Aria responde a "Procuro T3 em Lisboa até 500k" com card do Campo de Ourique
+- [x] Sem regressões no agent-centric (channels/email persistem, /test-channel e /test-email OK)
 
 ## v3.0 (2026-05-03) — Arquitetura 100% AGENT-CENTRIC
 
