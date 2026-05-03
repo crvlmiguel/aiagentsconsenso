@@ -506,11 +506,11 @@ async def remove_member(user_id: str, claims=Depends(current_user)):
 # ======================== PLATFORM ADMIN ========================
 @api.get("/admin/tenants")
 async def list_all_tenants(claims=Depends(current_user)):
-    if claims.get("role") != "platform_admin" and claims.get("role") != "owner":
-        # allow owners to see their own tenant stats (read-only self view)
-        tenant = await db.tenants.find_one({"id": claims["tenant_id"]}, {"_id": 0})
-        return [tenant] if tenant else []
-    tenants = await db.tenants.find({}, {"_id": 0}).to_list(500)
+    # Only platform_admin sees all tenants. Owners see only their own tenant.
+    if claims.get("role") != "platform_admin":
+        tenants = await db.tenants.find({"id": claims["tenant_id"]}, {"_id": 0}).to_list(1)
+    else:
+        tenants = await db.tenants.find({}, {"_id": 0}).to_list(500)
     result = []
     for t in tenants:
         users = await db.users.count_documents({"tenant_id": t["id"]})
