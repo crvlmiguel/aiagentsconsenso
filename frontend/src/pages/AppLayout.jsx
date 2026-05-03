@@ -7,19 +7,16 @@ const AppLayout = () => {
   const { user, loading } = useAuth();
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#09090B] text-white flex items-center justify-center">
-        <div className="mono text-xs text-zinc-500 uppercase tracking-widest">Loading…</div>
+      <div className="min-h-screen bg-[#F7F9FC] flex items-center justify-center">
+        <div className="text-sm text-[#5B6B82]">A carregar…</div>
       </div>
     );
   }
-  if (!user) return <Navigate to="/login" replace />;
-
+  if (!user) return <Navigate to="/iniciar-sessao" replace />;
   return (
-    <div className="h-screen grid grid-cols-[256px_1fr] bg-[#09090B] text-white">
+    <div className="h-screen grid grid-cols-[256px_1fr] bg-[#F7F9FC]">
       <Sidebar />
-      <main className="overflow-hidden" data-testid="app-main">
-        <Outlet />
-      </main>
+      <main className="overflow-hidden" data-testid="app-main"><Outlet /></main>
     </div>
   );
 };

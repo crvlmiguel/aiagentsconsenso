@@ -1,22 +1,24 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  Inbox, Bot, Users, LifeBuoy, Plug, BarChart3,
-  UserPlus, Settings, Shield, LogOut, CircleDot,
+  Inbox, Bot, Users, LifeBuoy, Plug, BarChart3, UserPlus,
+  Settings as SettingsIcon, Shield, LogOut, Database, Wand2,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
-import { CPLogo } from "./Brand";
+import { Logo } from "./Brand";
 
 const items = [
-  { to: "/app/inbox", label: "Inbox", icon: Inbox, tid: "nav-inbox" },
-  { to: "/app/agents", label: "Agents", icon: Bot, tid: "nav-agents" },
+  { to: "/app/painel", label: "Painel", icon: BarChart3, tid: "nav-painel" },
+  { to: "/app/caixa", label: "Caixa de entrada", icon: Inbox, tid: "nav-caixa" },
+  { to: "/app/construtor", label: "Construtor", icon: Wand2, tid: "nav-construtor", badge: "NOVO" },
+  { to: "/app/agentes", label: "Agentes IA", icon: Bot, tid: "nav-agentes" },
+  { to: "/app/fontes", label: "Fontes de dados", icon: Database, tid: "nav-fontes" },
   { to: "/app/leads", label: "Leads", icon: Users, tid: "nav-leads" },
   { to: "/app/tickets", label: "Tickets", icon: LifeBuoy, tid: "nav-tickets" },
-  { to: "/app/integrations", label: "Channels", icon: Plug, tid: "nav-integrations" },
-  { to: "/app/analytics", label: "Analytics", icon: BarChart3, tid: "nav-analytics" },
-  { to: "/app/team", label: "Team", icon: UserPlus, tid: "nav-team" },
+  { to: "/app/canais", label: "Canais & CRM", icon: Plug, tid: "nav-canais" },
+  { to: "/app/equipa", label: "Equipa", icon: UserPlus, tid: "nav-equipa" },
   { to: "/app/admin", label: "Admin", icon: Shield, tid: "nav-admin" },
-  { to: "/app/settings", label: "Settings", icon: Settings, tid: "nav-settings" },
+  { to: "/app/definicoes", label: "Definições", icon: SettingsIcon, tid: "nav-definicoes" },
 ];
 
 const Sidebar = () => {
@@ -24,69 +26,57 @@ const Sidebar = () => {
   const nav = useNavigate();
 
   return (
-    <aside
-      data-testid="sidebar"
-      className="w-64 border-r border-zinc-800 flex flex-col h-screen bg-[#09090B]"
-    >
-      <div className="p-4 border-b border-zinc-800">
-        <button
-          data-testid="sidebar-logo"
-          onClick={() => nav("/app/inbox")}
-          className="flex items-center gap-2 hover:opacity-80"
-        >
-          <CPLogo size={24} />
+    <aside data-testid="sidebar" className="w-64 bg-white border-r border-[#E5EAF2] flex flex-col h-screen">
+      <div className="px-5 py-5 border-b border-[#E5EAF2]">
+        <button data-testid="sidebar-logo" onClick={() => nav("/app/painel")} className="flex items-center hover:opacity-80">
+          <Logo size={26} />
         </button>
       </div>
 
-      <div className="px-4 py-3 border-b border-zinc-800">
-        <div className="label-mono">Tenant</div>
-        <div className="text-sm font-bold truncate">{tenant?.name || "—"}</div>
-        <div className="mono text-[10px] text-zinc-500 mt-1 flex items-center gap-1">
-          <CircleDot size={8} className="text-[#22C55E] dot-live" />
-          <span>{tenant?.plan?.toUpperCase() || "FREE"}</span>
-          <span className="text-zinc-700">·</span>
-          <span className="truncate">{tenant?.slug}</span>
+      <div className="px-5 py-4 border-b border-[#E5EAF2]">
+        <div className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">Organização</div>
+        <div className="text-sm font-semibold mt-0.5 truncate">{tenant?.name || "—"}</div>
+        <div className="flex items-center gap-1.5 mt-1">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] live-dot" />
+          <span className="text-[11px] text-[#5B6B82] uppercase tracking-wider">
+            {tenant?.plan || "FREE"}
+          </span>
         </div>
       </div>
 
-      <nav className="flex-1 overflow-y-auto py-2">
+      <nav className="flex-1 overflow-y-auto py-3 px-2">
         {items.map((it) => (
           <NavLink
-            key={it.to}
-            to={it.to}
-            data-testid={it.tid}
+            key={it.to} to={it.to} data-testid={it.tid}
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-2.5 text-sm transition-colors border-l-2 ${
+              `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium mb-0.5 transition-colors ${
                 isActive
-                  ? "bg-zinc-900 border-white text-white"
-                  : "border-transparent text-zinc-400 hover:bg-zinc-900/50 hover:text-white"
+                  ? "bg-[#EAF2FF] text-[#0069FE]"
+                  : "text-[#2C3A52] hover:bg-[#F7F9FC]"
               }`
             }
           >
-            <it.icon size={16} strokeWidth={1.75} />
+            <it.icon size={16} strokeWidth={2} />
             <span className="flex-1">{it.label}</span>
+            {it.badge && (
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0069FE] text-white tracking-wider">{it.badge}</span>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="border-t border-zinc-800 p-3">
-        <div className="flex items-center gap-2 mb-2 px-1">
-          <div className="w-8 h-8 border border-zinc-700 flex items-center justify-center mono text-xs">
+      <div className="border-t border-[#E5EAF2] p-3">
+        <div className="flex items-center gap-2 px-2 py-2 rounded-lg">
+          <div className="w-8 h-8 rounded-full bg-[#EAF2FF] text-[#0069FE] font-bold text-xs flex items-center justify-center">
             {(user?.name || "U").slice(0, 2).toUpperCase()}
           </div>
           <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold truncate">{user?.name}</div>
-            <div className="mono text-[10px] text-zinc-500 truncate uppercase">
-              {user?.role}
-            </div>
+            <div className="text-xs font-semibold truncate text-[#0B1324]">{user?.name}</div>
+            <div className="text-[11px] text-[#5B6B82] truncate">{user?.email}</div>
           </div>
         </div>
-        <button
-          data-testid="btn-logout"
-          onClick={logout}
-          className="w-full flex items-center gap-2 px-3 py-2 text-xs mono uppercase tracking-widest border border-zinc-800 hover:border-zinc-500 hover:bg-zinc-900 transition-colors"
-        >
-          <LogOut size={14} /> Logout
+        <button data-testid="btn-logout" onClick={logout} className="btn-ghost w-full justify-center mt-2 text-[13px]">
+          <LogOut size={14} /> Terminar sessão
         </button>
       </div>
     </aside>

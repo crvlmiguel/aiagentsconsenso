@@ -20,6 +20,7 @@ class Tenant(BaseModel):
     name: str
     slug: str
     plan: str = "pro"
+    default_language: str = "pt"
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -53,7 +54,7 @@ class AuthResponse(BaseModel):
 
 # ---------- Agents ----------
 class AgentTool(BaseModel):
-    key: str  # create_lead, create_ticket, send_email, webhook
+    key: str
     enabled: bool = True
 
 
@@ -62,38 +63,68 @@ class Agent(BaseModel):
     id: str = Field(default_factory=new_id)
     tenant_id: str
     name: str
-    tone: str = "professional"
-    goal: str = "Help customers"
-    system_prompt: str = "You are a helpful AI assistant."
+    tone: str = "profissional"
+    goal: str = "Ajudar clientes"
+    system_prompt: str = "És um assistente útil."
     rules: str = ""
     model_provider: Literal["openai", "anthropic", "gemini", "auto"] = "auto"
     model_name: str = "gpt-5.1"
     tools: List[AgentTool] = Field(default_factory=list)
     knowledge: str = ""
+    data_source_ids: List[str] = Field(default_factory=list)
+    default_language: str = "pt"
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
 
 class AgentInput(BaseModel):
     name: str
-    tone: str = "professional"
-    goal: str = "Help customers"
-    system_prompt: str = "You are a helpful AI assistant."
+    tone: str = "profissional"
+    goal: str = "Ajudar clientes"
+    system_prompt: str = "És um assistente útil."
     rules: str = ""
     model_provider: str = "auto"
     model_name: str = "gpt-5.1"
     tools: List[AgentTool] = Field(default_factory=list)
     knowledge: str = ""
+    data_source_ids: List[str] = Field(default_factory=list)
+    default_language: str = "pt"
     active: bool = True
 
 
-# ---------- Channels / Integrations ----------
+# ---------- Data Sources ----------
+class DataSource(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=new_id)
+    tenant_id: str
+    kind: Literal["url", "text", "file"]
+    name: str
+    url: Optional[str] = None
+    status: Literal["pending", "indexed", "error"] = "pending"
+    chunks: int = 0
+    items: int = 0
+    last_indexed_at: Optional[str] = None
+    error: Optional[str] = None
+    created_at: str = Field(default_factory=now_iso)
+
+
+class DataSourceURLInput(BaseModel):
+    name: str
+    url: str
+
+
+class DataSourceTextInput(BaseModel):
+    name: str
+    text: str
+
+
+# ---------- Integrations ----------
 class Integration(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str = Field(default_factory=new_id)
     tenant_id: str
-    kind: str  # whatsapp, instagram, telegram, messenger, webchat, hubspot, pipedrive, salesforce, webhook
-    category: Literal["channel", "crm"]
+    kind: str
+    category: Literal["channel", "crm", "email"]
     name: str
     status: Literal["connected", "disconnected", "error"] = "disconnected"
     config: Dict[str, Any] = Field(default_factory=dict)
@@ -110,9 +141,10 @@ class Conversation(BaseModel):
     contact_name: str
     contact_avatar: Optional[str] = None
     status: Literal["open", "ai", "human", "closed"] = "ai"
-    assigned_to: Optional[str] = None  # user id if human taken over
+    assigned_to: Optional[str] = None
     agent_id: Optional[str] = None
     tags: List[str] = Field(default_factory=list)
+    language: Optional[str] = None
     last_message: str = ""
     last_message_at: str = Field(default_factory=now_iso)
     unread: int = 0
@@ -129,6 +161,7 @@ class Message(BaseModel):
     sender: Literal["user", "ai", "human"]
     sender_name: str
     text: str
+    cards: List[Dict[str, Any]] = Field(default_factory=list)
     meta: Dict[str, Any] = Field(default_factory=dict)
     created_at: str = Field(default_factory=now_iso)
 
@@ -136,9 +169,9 @@ class Message(BaseModel):
 class InboundMessage(BaseModel):
     channel: str = "webchat"
     external_user_id: str
-    contact_name: str = "Web Visitor"
+    contact_name: str = "Visitante Web"
     text: str
-    tenant_id: Optional[str] = None  # used for public webchat endpoint
+    tenant_id: Optional[str] = None
 
 
 class SendMessageInput(BaseModel):
@@ -157,8 +190,10 @@ class Lead(BaseModel):
     source: str = "webchat"
     stage: Literal["new", "contacted", "qualified", "won", "lost"] = "new"
     score: int = 0
+    tags: List[str] = Field(default_factory=list)
     notes: str = ""
     conversation_id: Optional[str] = None
+    crm_synced: bool = False
     created_at: str = Field(default_factory=now_iso)
 
 
@@ -170,6 +205,7 @@ class LeadInput(BaseModel):
     source: str = "manual"
     stage: str = "new"
     score: int = 0
+    tags: List[str] = Field(default_factory=list)
     notes: str = ""
 
 

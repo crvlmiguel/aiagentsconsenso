@@ -1,0 +1,50 @@
+{
+  "summary": "v2.0 PT-PT pivot tested end-to-end. Backend: 19/19 pytest tests pass including the critical AI pipeline that returns cards for Portuguese real-estate queries, language auto-detection (pt/en), data-sources CRUD (text + URL scraping of example.com worked), tenant-isolated delete, public webchat endpoint, widget HTML (via /api/widget/), WebSocket /api/ws/{tenant_id} accepts connections, and inbound simulate auto-creates leads with tags. Frontend: login at /iniciar-sessao works, all 11 PT-PT sidebar labels present (Painel, Caixa de entrada, Construtor, Agentes IA, Fontes de dados, Leads, Tickets, Canais & CRM, Equipa, Admin, Definições), Painel KPIs + 2 charts render, Caixa de entrada lists seeded convos with 3-pane + simulator, Construtor wizard flows through all 4 steps (Modelo → Instruções → Dados → Ativar), Fontes shows seeded 'Catálogo de imóveis', Canais shows WhatsApp/HubSpot integrations, Leads lists Ana Ferreira, Definições shows widget snippet. Tenant: 'Imobiliária Lisboa'.",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "GET /widget/{tenant_id} (non-/api path)", "issue": "Public widget URL used in Definicoes embed snippet (${REACT_APP_BACKEND_URL}/widget/{tenant_id}) is intercepted by the Kubernetes ingress and routed to the React frontend (port 3000), so external sites embedding the iframe receive the Consenso SPA HTML instead of the widget chat. Backend also registers the route at /api/widget/{tenant_id} which works correctly. Fix: change /app/frontend/src/pages/Definicoes.jsx widgetPageUrl to use `${REACT_APP_BACKEND_URL}/api/widget/${tenant?.id}?...` so the embed actually loads the chat widget.", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "N/A", "issue": "Non-/api widget route in server.py (`@app.get('/widget/{tenant_id}')`) is dead code under the current ingress rules — cannot be reached externally. Either remove it or coordinate with infra to whitelist /widget."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "Painel / Leads por estado chart", "issue": "Pie chart container shows a stuck spinner/empty state with tenant having 1 lead in 'new' stage — Recharts receives width/height -1 initially (console warnings repeated). Likely a flex container sizing race when navigating directly. Refresh usually resolves, but first paint looks broken.", "selector": ".recharts-wrapper (right chart)", "priority": "MEDIUM"}
+    ],
+    "integration_issues": [
+      {"flow": "WebSocket live updates", "issue": "Browser logs 'WebSocket connection to wss://.../api/ws/{tenant_id} failed: WebSocket is closed before the connection is established.' on Painel load. Raw websocket-client connects successfully in pytest, so the WS server works. Likely a React useEffect cleanup closing the socket before the handshake completes (double-mount in dev/strict mode), or the first navigation unmounts the provider. Real-time updates may not fire for the first render.", "affected_selectors": ["(no UI selector — console/network)"]}
+    ],
+    "design_issues": [
+      {"screen": "Painel", "issues": ["Welcome toast overlaps top-right area on first load (same minor issue as iteration_1)."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "HIGH: Fix Definicoes.jsx widget embed URL to use /api/widget/{tenant_id} (ingress routes non-/api paths to frontend). Without this, embed snippet given to customers is broken.",
+    "MEDIUM: Fix Painel 'Leads por estado' PieChart container sizing — add explicit min-height or ResponsiveContainer with fixed height to avoid width=-1/height=-1 warnings and stuck spinner.",
+    "LOW: Investigate WS early-close in frontend useEffect (ensure cleanup only runs on real unmount; guard against strict-mode double-mount)."
+  ],
+  "critical_code_review_comments": [
+    "server.py now ~760 lines — crossed the 700-line threshold. Split into routers/{auth, agents, data_sources, conversations, inbound, leads, tickets, integrations, team, admin, widget}.py.",
+    "Widget HTML is hard-coded as a 60+ line string constant in server.py — move to /app/backend/static/widget.html and serve via FileResponse for maintainability.",
+    "/api/widget/{tenant_id} does not validate tenant exists before returning HTML — any tenant_id string serves the widget; widget JS then hits /api/webchat/{tenant_id}/message which does validate. Low risk but tighten for clean UX.",
+    "_process_inbound: agent selection picks FIRST active agent — if a tenant has multiple active agents, routing is non-deterministic. Consider explicit agent_id in InboundMessage or tenant default_agent_id.",
+    "Orchestrator language detection uses first message only (_detect(inbound.text)) — a single short 'ok' reply in the middle of a Portuguese thread will flip convo.language to 'en'. Consider using detected language from first user message and persisting as convo.language without overwriting.",
+    "No rate limiting on /api/webchat/{tenant_id}/message (public unauth endpoint) — a malicious actor can spam inbound messages and exhaust LLM budget for a tenant. Add per-external_user_id or per-tenant rate limits."
+  ],
+  "updated_files": [
+    "/app/backend/tests/backend_test.py (rewritten for v2: data-sources, cards, language detection, widget, websocket)",
+    "/app/memory/test_credentials.md (NOT updated — still says tenant 'Acme Corp'; actual v2 tenant is 'Imobiliária Lisboa'; main agent should fix)"
+  ],
+  "success_rate": {"backend": "100% (19/19)", "frontend": "~90% of flows verified"},
+  "test_credentials": "demo@consenso.plus / demo1234 — tenant 'Imobiliária Lisboa' (NOTE: /app/memory/test_credentials.md still says 'Acme Corp' — stale from v1)",
+  "seed_data_creation": "Seed already ran on backend startup (PT-PT demo tenant Imobiliária Lisboa with 3 seeded convos Ana/João/Rita, 1 lead Ana Ferreira, 1 ticket, 10 integrations across channel/crm/email, 1 active agent 'Aria', 1 seeded data source 'Catálogo de imóveis (demo)' with chunks + items). Tests created and cleaned up TEST_ prefixed tenants, text sources, and URL sources.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest at /app/backend/tests/backend_test.py — all v2 endpoints covered; run: cd /app/backend && python -m pytest tests/backend_test.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml. Slow tests (LLM) take 10-30s each. IMPORTANT: The /widget/{tenant_id} route (without /api) is unreachable via ingress — only /api/widget/{tenant_id} works externally. The frontend Definicoes embed URL currently uses the broken non-/api path; if main agent fixes it, re-verify widget iframe loads by visiting ${BACKEND}/api/widget/{tenant_id}?tenant={id}&api=... in a browser and sending a message. Frontend testids confirmed: login-email/login-password/login-submit, nav-{painel,caixa,construtor,agentes,fontes,leads,tickets,canais,equipa,admin,definicoes}, btn-logout, convo-item-{uuid}, btn-simulate, sim-{name,channel,text}, tpl-{realestate,support,ecommerce,clinic}, btn-next/btn-back/btn-activate in wizard, agent-test-input, btn-test-agent, btn-open-widget.",
+  "rca of the issue": "Widget embed bug RCA: Kubernetes ingress rule in this environment routes paths starting with /api to backend:8001 and all other paths to frontend:3000. server.py registered /widget/{tenant_id} at the FastAPI app level (no /api prefix) hoping to expose a short URL, but in production it's shadowed by the frontend catch-all. The test `curl $BACKEND/widget/{id}` returns the React SPA HTML confirming the route is hijacked. Fix: use /api/widget/{tenant_id} everywhere (server already registers both — only frontend Definicoes.jsx needs the prefix update). Reproduction: curl -s https://business-os-hub-3.preview.emergentagent.com/widget/any-id | grep -i 'emergent.sh' → returns SPA, not widget. With /api/ prefix → returns the correct Consenso+ widget HTML."
+}

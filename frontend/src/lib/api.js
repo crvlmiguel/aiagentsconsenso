@@ -16,9 +16,9 @@ api.interceptors.response.use(
   (err) => {
     if (err?.response?.status === 401) {
       localStorage.removeItem("cp_token");
-      if (!window.location.pathname.startsWith("/login") &&
-          !window.location.pathname.startsWith("/register")) {
-        window.location.href = "/login";
+      if (!window.location.pathname.startsWith("/iniciar-sessao") &&
+          !window.location.pathname.startsWith("/registar")) {
+        window.location.href = "/iniciar-sessao";
       }
     }
     return Promise.reject(err);

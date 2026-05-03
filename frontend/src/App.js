@@ -7,51 +7,56 @@ import { Toaster } from "sonner";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 import AppLayout from "./pages/AppLayout";
-import Inbox from "./pages/Inbox";
-import Agents from "./pages/Agents";
+import Painel from "./pages/Painel";
+import Caixa from "./pages/Caixa";
+import Construtor from "./pages/Construtor";
+import Agentes from "./pages/Agentes";
+import Fontes from "./pages/Fontes";
 import Leads from "./pages/Leads";
 import Tickets from "./pages/Tickets";
-import Integrations from "./pages/Integrations";
-import Analytics from "./pages/Analytics";
-import Team from "./pages/Team";
+import Canais from "./pages/Canais";
+import Equipa from "./pages/Equipa";
 import Admin from "./pages/Admin";
-import Settings from "./pages/Settings";
+import Definicoes from "./pages/Definicoes";
 
 function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
         <Toaster
-          theme="dark"
           position="top-right"
+          richColors
           toastOptions={{
             style: {
-              background: "#09090B",
-              border: "1px solid #27272A",
-              borderRadius: 0,
-              color: "#FAFAFA",
-              fontFamily: "JetBrains Mono, monospace",
-              fontSize: 12,
+              background: "#fff",
+              border: "1px solid #E5EAF2",
+              borderRadius: 10,
+              color: "#0B1324",
+              fontSize: 13,
             },
           }}
         />
         <Routes>
-          <Route path="/" element={<Navigate to="/login" replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
+          <Route path="/" element={<Navigate to="/iniciar-sessao" replace />} />
+          <Route path="/iniciar-sessao" element={<Login />} />
+          <Route path="/login" element={<Navigate to="/iniciar-sessao" replace />} />
+          <Route path="/registar" element={<Register />} />
+          <Route path="/register" element={<Navigate to="/registar" replace />} />
           <Route path="/app" element={<AppLayout />}>
-            <Route index element={<Navigate to="/app/inbox" replace />} />
-            <Route path="inbox" element={<Inbox />} />
-            <Route path="agents" element={<Agents />} />
+            <Route index element={<Navigate to="/app/painel" replace />} />
+            <Route path="painel" element={<Painel />} />
+            <Route path="caixa" element={<Caixa />} />
+            <Route path="construtor" element={<Construtor />} />
+            <Route path="agentes" element={<Agentes />} />
+            <Route path="fontes" element={<Fontes />} />
             <Route path="leads" element={<Leads />} />
             <Route path="tickets" element={<Tickets />} />
-            <Route path="integrations" element={<Integrations />} />
-            <Route path="analytics" element={<Analytics />} />
-            <Route path="team" element={<Team />} />
+            <Route path="canais" element={<Canais />} />
+            <Route path="equipa" element={<Equipa />} />
             <Route path="admin" element={<Admin />} />
-            <Route path="settings" element={<Settings />} />
+            <Route path="definicoes" element={<Definicoes />} />
           </Route>
-          <Route path="*" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/iniciar-sessao" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

@@ -2,7 +2,8 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
-import { CPLogo } from "../components/Brand";
+import { Logo } from "../components/Brand";
+import { Bot, Zap, ShieldCheck, Database } from "lucide-react";
 
 const Login = () => {
   const { login } = useAuth();
@@ -16,104 +17,78 @@ const Login = () => {
     setLoading(true);
     try {
       await login(email, password);
-      toast.success("Welcome back.");
-      nav("/app/inbox");
+      toast.success("Bem-vindo de volta.");
+      nav("/app/painel");
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Login failed");
-    } finally {
-      setLoading(false);
-    }
+      toast.error(err?.response?.data?.detail || "Falha ao iniciar sessão");
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] text-white grid grid-cols-1 md:grid-cols-[1fr_480px]">
-      {/* Left pane: big control-room look */}
-      <div className="hidden md:flex flex-col justify-between p-10 border-r border-zinc-800 grid-bg relative">
-        <CPLogo size={32} />
-        <div className="space-y-3 max-w-md">
-          <div className="label-mono">SYS_VERSION / 1.0.0</div>
-          <h1 className="text-4xl font-extrabold tracking-tighter uppercase leading-none">
-            The AI operating system for
-            <span className="text-[#FF5500]"> modern businesses.</span>
+    <div className="min-h-screen bg-[#F7F9FC] grid md:grid-cols-2">
+      <div className="hidden md:flex flex-col justify-between p-12 bg-gradient-to-br from-[#0069FE] to-[#003F99] text-white relative overflow-hidden">
+        <div className="absolute inset-0 opacity-20" style={{
+          backgroundImage: "radial-gradient(circle at 20% 20%, #fff 1px, transparent 1px), radial-gradient(circle at 80% 70%, #fff 1px, transparent 1px)",
+          backgroundSize: "40px 40px"
+        }} />
+        <div className="relative">
+          <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full text-xs font-medium">
+            <span className="w-1.5 h-1.5 bg-[#7CFFA3] rounded-full live-dot" />
+            Sistema Operativo de IA
+          </div>
+          <h1 className="font-display text-5xl font-bold leading-[1.05] mt-8 max-w-md">
+            A plataforma de IA que opera o seu negócio.
           </h1>
-          <p className="text-sm text-zinc-400 leading-relaxed">
-            Unify every inbox. Structure every conversation. Automate every
-            workflow. One platform. Every channel.
+          <p className="text-white/75 mt-4 max-w-md leading-relaxed">
+            Crie agentes de IA ligados aos seus dados, implemente em qualquer canal,
+            automatize vendas e suporte.
           </p>
         </div>
-        <div className="grid grid-cols-3 gap-4 mono text-[10px] text-zinc-500 uppercase tracking-widest">
-          <div className="border border-zinc-800 p-3">
-            <div className="text-white text-xl font-bold">05</div>
-            channels unified
-          </div>
-          <div className="border border-zinc-800 p-3">
-            <div className="text-white text-xl font-bold">03</div>
-            LLM providers
-          </div>
-          <div className="border border-zinc-800 p-3">
-            <div className="text-[#FF5500] text-xl font-bold">∞</div>
-            automations
-          </div>
+        <div className="relative grid grid-cols-2 gap-4 max-w-md">
+          {[
+            { icon: Bot, t: "Agentes IA", d: "Crie e deploy em minutos" },
+            { icon: Database, t: "Fontes", d: "Websites, ficheiros, BD" },
+            { icon: Zap, t: "Multi-canal", d: "Web, WA, IG, Telegram" },
+            { icon: ShieldCheck, t: "Multi-tenant", d: "Isolamento total" },
+          ].map((f, i) => (
+            <div key={i} className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/10">
+              <f.icon size={18} />
+              <div className="font-semibold text-sm mt-2">{f.t}</div>
+              <div className="text-[11px] text-white/70">{f.d}</div>
+            </div>
+          ))}
         </div>
       </div>
 
-      {/* Right pane: form */}
       <div className="flex items-center justify-center p-6">
-        <form
-          data-testid="login-form"
-          onSubmit={onSubmit}
-          className="w-full max-w-sm space-y-6"
-        >
-          <div>
-            <div className="label-mono mb-1">ACCESS / LOG IN</div>
-            <h2 className="text-2xl font-bold tracking-tight uppercase">
-              Enter the system
-            </h2>
-          </div>
+        <form data-testid="login-form" onSubmit={onSubmit} className="w-full max-w-sm">
+          <div className="md:hidden mb-8"><Logo size={28} /></div>
+          <h2 className="font-display text-3xl font-bold text-[#0B1324]">Iniciar sessão</h2>
+          <p className="text-[#5B6B82] mt-1.5 text-sm">Aceda ao seu sistema operativo de IA.</p>
 
-          <div className="space-y-3">
+          <div className="mt-8 space-y-4">
             <div>
-              <label className="label-mono block mb-1">EMAIL</label>
-              <input
-                data-testid="login-email"
-                type="email"
-                required
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-[#18181B] border border-zinc-800 focus:border-white outline-none px-3 py-2.5 text-sm mono"
-                placeholder="you@company.com"
-              />
+              <label className="label">Email</label>
+              <input data-testid="login-email" type="email" required value={email}
+                onChange={(e) => setEmail(e.target.value)} className="input-base"
+                placeholder="voce@empresa.pt" />
             </div>
             <div>
-              <label className="label-mono block mb-1">PASSWORD</label>
-              <input
-                data-testid="login-password"
-                type="password"
-                required
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-[#18181B] border border-zinc-800 focus:border-white outline-none px-3 py-2.5 text-sm mono"
-              />
+              <label className="label">Palavra-passe</label>
+              <input data-testid="login-password" type="password" required value={password}
+                onChange={(e) => setPassword(e.target.value)} className="input-base" />
             </div>
           </div>
 
-          <button
-            data-testid="login-submit"
-            disabled={loading}
-            className="w-full bg-white text-black py-3 font-bold mono text-xs uppercase tracking-widest hover:bg-zinc-200 disabled:opacity-50"
-          >
-            {loading ? "Authenticating…" : "Log in →"}
+          <button data-testid="login-submit" disabled={loading} className="btn-primary w-full justify-center mt-6 py-3">
+            {loading ? "A autenticar…" : "Entrar"}
           </button>
 
-          <div className="text-xs text-zinc-500 flex justify-between mono uppercase tracking-widest">
-            <Link
-              to="/register"
-              data-testid="link-register"
-              className="hover:text-white"
-            >
-              New tenant? Register
+          <div className="flex justify-between text-[13px] text-[#5B6B82] mt-4">
+            <Link to="/registar" data-testid="link-register" className="hover:text-[#0069FE] font-medium">
+              Criar nova conta
             </Link>
-            <span>Demo: demo / demo1234</span>
+            <span className="text-xs">Demo: demo / demo1234</span>
           </div>
         </form>
       </div>

@@ -3,15 +3,16 @@ import { api } from "../lib/api";
 import { toast } from "sonner";
 import { Plus, Trash2 } from "lucide-react";
 
-const statuses = ["open", "in_progress", "waiting", "resolved", "closed"];
-const priorities = ["low", "medium", "high", "urgent"];
-
-const priorityColor = {
-  low: "border-zinc-700 text-zinc-400",
-  medium: "border-[#EAB308] text-[#EAB308]",
-  high: "border-[#FF5500] text-[#FF5500]",
-  urgent: "border-[#EF4444] text-[#EF4444]",
-};
+const statuses = [
+  { k: "open", l: "Aberto" }, { k: "in_progress", l: "Em curso" },
+  { k: "waiting", l: "A aguardar" }, { k: "resolved", l: "Resolvido" }, { k: "closed", l: "Fechado" },
+];
+const priorities = [
+  { k: "low", l: "Baixa", cls: "badge-ghost" },
+  { k: "medium", l: "Média", cls: "badge-amber" },
+  { k: "high", l: "Alta", cls: "badge-blue" },
+  { k: "urgent", l: "Urgente", cls: "badge-red" },
+];
 
 const Tickets = () => {
   const [tickets, setTickets] = useState([]);
@@ -22,75 +23,73 @@ const Tickets = () => {
   useEffect(() => { load(); }, []);
 
   const save = async () => {
-    if (!newT.subject) return toast.error("Subject required");
-    await api.post("/tickets", newT);
-    setShow(false); setNewT({ subject: "", description: "", priority: "medium", status: "open" });
-    load(); toast.success("Ticket created");
+    if (!newT.subject) return toast.error("Assunto obrigatório");
+    await api.post("/tickets", newT); setShow(false);
+    setNewT({ subject: "", description: "", priority: "medium", status: "open" });
+    load(); toast.success("Ticket criado");
   };
-  const update = async (t, changes) => {
-    await api.put(`/tickets/${t.id}`, { ...t, ...changes });
-    load();
-  };
-  const del = async (id) => { await api.delete(`/tickets/${id}`); load(); toast.success("Deleted"); };
+  const update = async (t, changes) => { await api.put(`/tickets/${t.id}`, { ...t, ...changes }); load(); };
+  const del = async (id) => { await api.delete(`/tickets/${id}`); load(); toast.success("Eliminado"); };
 
   return (
-    <div className="h-full flex flex-col">
-      <div className="border-b border-zinc-800 p-4 flex items-center justify-between">
+    <div className="h-full overflow-y-auto p-8">
+      <div className="flex items-center justify-between mb-5">
         <div>
-          <h1 className="text-xl font-bold uppercase tracking-tight">Support Tickets</h1>
-          <div className="mono text-[10px] text-zinc-500 uppercase tracking-widest">
-            {tickets.filter(t => t.status !== "closed" && t.status !== "resolved").length} OPEN
-          </div>
+          <h1 className="font-display text-2xl font-bold">Tickets</h1>
+          <p className="text-sm text-[#5B6B82] mt-1">{tickets.filter(t => t.status !== "closed" && t.status !== "resolved").length} em aberto</p>
         </div>
-        <button data-testid="btn-new-ticket" onClick={() => setShow(!show)}
-          className="mono text-[10px] uppercase tracking-widest border border-zinc-700 hover:border-white px-3 py-2 flex items-center gap-1">
-          <Plus size={12} /> New Ticket
+        <button data-testid="btn-new-ticket" onClick={() => setShow(!show)} className="btn-primary">
+          <Plus size={14} /> Novo ticket
         </button>
       </div>
 
       {show && (
-        <div className="border-b border-zinc-800 p-4 grid grid-cols-4 gap-2" data-testid="ticket-form">
-          <input data-testid="ticket-subject" placeholder="Subject" value={newT.subject}
-            onChange={(e) => setNewT({ ...newT, subject: e.target.value })}
-            className="bg-[#18181B] border border-zinc-800 px-2 py-1.5 text-xs col-span-2 focus:border-white outline-none" />
-          <select data-testid="ticket-priority" value={newT.priority}
-            onChange={(e) => setNewT({ ...newT, priority: e.target.value })}
-            className="bg-[#18181B] border border-zinc-800 px-2 py-1.5 text-xs mono uppercase">
-            {priorities.map(p => <option key={p}>{p}</option>)}
-          </select>
-          <button data-testid="btn-save-ticket" onClick={save}
-            className="bg-white text-black mono text-xs uppercase tracking-widest font-bold hover:bg-zinc-200">Create</button>
-          <textarea data-testid="ticket-description" placeholder="Description" rows={2}
-            value={newT.description} onChange={(e) => setNewT({ ...newT, description: e.target.value })}
-            className="bg-[#18181B] border border-zinc-800 px-2 py-1.5 text-xs col-span-4" />
+        <div className="card-surface p-5 mb-5 space-y-3" data-testid="ticket-form">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="col-span-2">
+              <label className="label">Assunto</label>
+              <input data-testid="ticket-subject" value={newT.subject} onChange={(e) => setNewT({ ...newT, subject: e.target.value })} className="input-base" />
+            </div>
+            <div>
+              <label className="label">Prioridade</label>
+              <select data-testid="ticket-priority" value={newT.priority} onChange={(e) => setNewT({ ...newT, priority: e.target.value })} className="input-base">
+                {priorities.map(p => <option key={p.k} value={p.k}>{p.l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div>
+            <label className="label">Descrição</label>
+            <textarea data-testid="ticket-description" rows={3} value={newT.description} onChange={(e) => setNewT({ ...newT, description: e.target.value })} className="input-base" />
+          </div>
+          <div className="flex justify-end gap-2">
+            <button className="btn-ghost" onClick={() => setShow(false)}>Cancelar</button>
+            <button data-testid="btn-save-ticket" onClick={save} className="btn-primary">Criar</button>
+          </div>
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
-        {tickets.map(t => (
-          <div key={t.id} data-testid={`ticket-row-${t.id}`} className="border-b border-zinc-800 p-4 hover:bg-zinc-900/50 flex items-center gap-4">
-            <span className={`mono text-[10px] uppercase border px-2 py-0.5 ${priorityColor[t.priority]}`}>{t.priority}</span>
-            <div className="flex-1">
-              <div className="font-semibold">{t.subject}</div>
-              <div className="text-xs text-zinc-500 truncate">{t.description}</div>
+      <div className="card-surface divide-y divide-[#E5EAF2]">
+        {tickets.map(t => {
+          const pr = priorities.find(p => p.k === t.priority) || priorities[1];
+          return (
+            <div key={t.id} data-testid={`ticket-row-${t.id}`} className="p-4 hover:bg-[#F7F9FC] flex items-center gap-4">
+              <span className={`badge ${pr.cls} shrink-0`}>{pr.l}</span>
+              <div className="flex-1 min-w-0">
+                <div className="font-semibold truncate">{t.subject}</div>
+                <div className="text-xs text-[#5B6B82] truncate">{t.description}</div>
+              </div>
+              <select value={t.status} onChange={(e) => update(t, { status: e.target.value })}
+                className="text-xs px-2.5 py-1.5 border border-[#E5EAF2] rounded-lg">
+                {statuses.map(s => <option key={s.k} value={s.k}>{s.l}</option>)}
+              </select>
+              <div className="text-xs text-[#5B6B82] w-24 text-right">{new Date(t.created_at).toLocaleDateString("pt-PT")}</div>
+              <button data-testid={`btn-delete-ticket-${t.id}`} onClick={() => del(t.id)} className="text-[#5B6B82] hover:text-[#DC2626]">
+                <Trash2 size={14} />
+              </button>
             </div>
-            <select value={t.status} onChange={(e) => update(t, { status: e.target.value })}
-              className="bg-[#18181B] border border-zinc-800 px-2 py-1 text-[10px] mono uppercase">
-              {statuses.map(s => <option key={s}>{s}</option>)}
-            </select>
-            <div className="mono text-[10px] text-zinc-500 w-24 text-right">
-              {new Date(t.created_at).toLocaleDateString()}
-            </div>
-            <button data-testid={`btn-delete-ticket-${t.id}`} onClick={() => del(t.id)} className="text-zinc-500 hover:text-[#EF4444]">
-              <Trash2 size={12} />
-            </button>
-          </div>
-        ))}
-        {tickets.length === 0 && (
-          <div className="p-8 text-center text-zinc-500 mono text-xs uppercase tracking-widest">
-            No tickets. AI-generated tickets will appear here.
-          </div>
-        )}
+          );
+        })}
+        {tickets.length === 0 && <div className="p-12 text-center text-sm text-[#5B6B82]">Sem tickets. A IA cria tickets automaticamente para problemas de suporte.</div>}
       </div>
     </div>
   );

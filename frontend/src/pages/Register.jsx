@@ -2,17 +2,12 @@ import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
-import { CPLogo } from "../components/Brand";
+import { Logo } from "../components/Brand";
 
 const Register = () => {
   const { register } = useAuth();
   const nav = useNavigate();
-  const [form, setForm] = useState({
-    company_name: "",
-    name: "",
-    email: "",
-    password: "",
-  });
+  const [form, setForm] = useState({ company_name: "", name: "", email: "", password: "" });
   const [loading, setLoading] = useState(false);
 
   const update = (k, v) => setForm({ ...form, [k]: v });
@@ -22,62 +17,47 @@ const Register = () => {
     setLoading(true);
     try {
       await register(form);
-      toast.success("Tenant created. Welcome!");
-      nav("/app/inbox");
+      toast.success("Conta criada. Bem-vindo!");
+      nav("/app/painel");
     } catch (err) {
-      toast.error(err?.response?.data?.detail || "Registration failed");
-    } finally {
-      setLoading(false);
-    }
+      toast.error(err?.response?.data?.detail || "Falha ao registar");
+    } finally { setLoading(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#09090B] text-white flex items-center justify-center p-6">
-      <form
-        data-testid="register-form"
-        onSubmit={onSubmit}
-        className="w-full max-w-md border border-zinc-800 bg-[#09090B] p-8 space-y-5"
-      >
-        <div className="flex justify-between items-center">
-          <CPLogo size={24} />
-          <Link to="/login" data-testid="link-login" className="label-mono hover:text-white">
-            ← Log in
+    <div className="min-h-screen bg-[#F7F9FC] flex items-center justify-center p-6">
+      <form data-testid="register-form" onSubmit={onSubmit}
+        className="w-full max-w-md card-surface p-8">
+        <div className="flex justify-between items-center mb-6">
+          <Logo size={26} />
+          <Link to="/iniciar-sessao" data-testid="link-login" className="text-sm text-[#5B6B82] hover:text-[#0069FE]">
+            ← Iniciar sessão
           </Link>
         </div>
 
-        <div>
-          <div className="label-mono mb-1">NEW_TENANT / INIT</div>
-          <h2 className="text-2xl font-bold uppercase tracking-tight">Create your workspace</h2>
-        </div>
+        <h2 className="font-display text-2xl font-bold">Criar conta</h2>
+        <p className="text-sm text-[#5B6B82] mt-1">Comece gratuitamente em segundos.</p>
 
-        <div className="space-y-3">
+        <div className="mt-6 space-y-4">
           {[
-            { k: "company_name", label: "Company name", type: "text", tid: "reg-company" },
-            { k: "name", label: "Your name", type: "text", tid: "reg-name" },
-            { k: "email", label: "Work email", type: "email", tid: "reg-email" },
-            { k: "password", label: "Password", type: "password", tid: "reg-password" },
+            { k: "company_name", label: "Nome da empresa", type: "text", tid: "reg-company", placeholder: "Imobiliária Lisboa" },
+            { k: "name", label: "O seu nome", type: "text", tid: "reg-name", placeholder: "Maria Silva" },
+            { k: "email", label: "Email de trabalho", type: "email", tid: "reg-email", placeholder: "maria@empresa.pt" },
+            { k: "password", label: "Palavra-passe", type: "password", tid: "reg-password", placeholder: "Mínimo 6 caracteres" },
           ].map((f) => (
             <div key={f.k}>
-              <label className="label-mono block mb-1">{f.label.toUpperCase()}</label>
-              <input
-                data-testid={f.tid}
-                type={f.type}
-                required
+              <label className="label">{f.label}</label>
+              <input data-testid={f.tid} type={f.type} required
                 minLength={f.k === "password" ? 6 : undefined}
-                value={form[f.k]}
-                onChange={(e) => update(f.k, e.target.value)}
-                className="w-full bg-[#18181B] border border-zinc-800 focus:border-white outline-none px-3 py-2.5 text-sm mono"
-              />
+                value={form[f.k]} onChange={(e) => update(f.k, e.target.value)}
+                placeholder={f.placeholder} className="input-base" />
             </div>
           ))}
         </div>
 
-        <button
-          data-testid="register-submit"
-          disabled={loading}
-          className="w-full bg-white text-black py-3 font-bold mono text-xs uppercase tracking-widest hover:bg-zinc-200 disabled:opacity-50"
-        >
-          {loading ? "Creating…" : "Create tenant →"}
+        <button data-testid="register-submit" disabled={loading}
+          className="btn-primary w-full justify-center mt-6 py-3">
+          {loading ? "A criar…" : "Criar conta"}
         </button>
       </form>
     </div>

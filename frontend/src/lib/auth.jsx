@@ -13,8 +13,7 @@ export const AuthProvider = ({ children }) => {
     if (!token) { setLoading(false); return; }
     try {
       const { data } = await api.get("/auth/me");
-      setUser(data.user);
-      setTenant(data.tenant);
+      setUser(data.user); setTenant(data.tenant);
     } catch { /* ignore */ }
     setLoading(false);
   };
@@ -27,18 +26,16 @@ export const AuthProvider = ({ children }) => {
     setUser(data.user); setTenant(data.tenant);
     return data;
   };
-
   const register = async (payload) => {
     const { data } = await api.post("/auth/register", payload);
     localStorage.setItem("cp_token", data.token);
     setUser(data.user); setTenant(data.tenant);
     return data;
   };
-
   const logout = () => {
     localStorage.removeItem("cp_token");
     setUser(null); setTenant(null);
-    window.location.href = "/login";
+    window.location.href = "/iniciar-sessao";
   };
 
   return (
