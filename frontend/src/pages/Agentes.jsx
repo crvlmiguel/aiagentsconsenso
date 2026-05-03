@@ -150,7 +150,12 @@ const Agentes = () => {
     setChatBusy(true);
     try {
       const { data } = await api.post(`/agents/${selected.id}/test`, { text: textToSend });
-      setChat(c => [...c, { role: "ai", text: data.reply, cards: data.cards }]);
+      setChat(c => [...c, { role: "ai", text: data.reply }]);
+      if (data.follow_up || (data.cards && data.cards.length > 0)) {
+        // Small delay then append the follow-up (two-bubble style)
+        await new Promise(r => setTimeout(r, 800));
+        setChat(c => [...c, { role: "ai", text: data.follow_up || "", cards: data.cards, isFollowUp: true }]);
+      }
     } catch (e) {
       const err = e?.response?.data?.detail || "API da IA não configurada ou inválida.";
       setChat(c => [...c, { role: "ai", text: err, error: true }]);
@@ -291,10 +296,49 @@ const Agentes = () => {
                   </div>
                   <div className="flex-1 space-y-3">
                     <div>
-                      <label className="label">URL da foto do agente</label>
-                      <input data-testid="agent-avatar" value={selected.avatar_url || ""}
-                        onChange={(e) => update("avatar_url", e.target.value)}
-                        placeholder="https://..." className="input-base" />
+                      <label className="label">Foto do agente</label>
+                      <div className="flex gap-2 items-center">
+                        <label className="btn-ghost text-[13px] cursor-pointer" data-testid="btn-upload-avatar">
+                          <input type="file" accept="image/png,image/jpeg,image/webp"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const f = e.target.files?.[0]; if (!f) return;
+                              if (f.size > 2 * 1024 * 1024) { toast.error("Imagem demasiado grande (máx 2MB)"); return; }
+                              if (!selected.id) {
+                                // Agent not saved yet — store as local data URL
+                                const reader = new FileReader();
+                                reader.onload = (ev) => update("avatar_url", ev.target.result);
+                                reader.readAsDataURL(f);
+                                toast.success("Imagem carregada. Guarde o agente para a persistir.");
+                                return;
+                              }
+                              const fd = new FormData();
+                              fd.append("file", f);
+                              try {
+                                const { data } = await api.post(`/agents/${selected.id}/avatar`, fd,
+                                  { headers: { "Content-Type": "multipart/form-data" } });
+                                update("avatar_url", data.avatar_url);
+                                toast.success("Foto atualizada.");
+                              } catch { toast.error("Falha no upload"); }
+                              e.target.value = "";
+                            }}
+                          />
+                          📁 Carregar imagem
+                        </label>
+                        {selected.avatar_url && (
+                          <button type="button" onClick={() => update("avatar_url", "")}
+                            data-testid="btn-remove-avatar"
+                            className="btn-ghost text-[12px] text-[#DC2626]">Remover</button>
+                        )}
+                      </div>
+                      <details className="mt-2">
+                        <summary className="text-[11px] text-[#5B6B82] cursor-pointer hover:text-[#0069FE]">
+                          Ou usar URL externo
+                        </summary>
+                        <input data-testid="agent-avatar" value={selected.avatar_url?.startsWith("data:") ? "" : (selected.avatar_url || "")}
+                          onChange={(e) => update("avatar_url", e.target.value)}
+                          placeholder="https://..." className="input-base mt-2 text-sm" />
+                      </details>
                     </div>
                     <div>
                       <label className="label">Mensagem de boas-vindas</label>

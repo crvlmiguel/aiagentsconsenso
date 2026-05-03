@@ -264,6 +264,23 @@ async def test_agent(agent_id: str, inp: SendMessageInput, claims=Depends(curren
             "language": lang, **reply}
 
 
+@api.post("/agents/{agent_id}/avatar")
+async def agent_upload_avatar(agent_id: str, file: UploadFile = File(...), claims=Depends(current_user)):
+    """Upload agent avatar image. Returns data URL for instant display."""
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(400, "Ficheiro não é uma imagem")
+    raw = await file.read()
+    if len(raw) > 2 * 1024 * 1024:
+        raise HTTPException(400, "Imagem demasiado grande (máx 2MB)")
+    import base64
+    data_url = f"data:{file.content_type};base64,{base64.b64encode(raw).decode('ascii')}"
+    await db.agents.update_one({"id": agent_id}, {"$set": {"avatar_url": data_url}})
+    return {"ok": True, "avatar_url": data_url}
+
+
 @api.post("/agents/{agent_id}/test-email")
 async def agent_test_email(agent_id: str, body: dict, claims=Depends(current_user)):
     """Send a test email using the agent's SMTP config."""
@@ -701,27 +718,44 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
     ai_msg = {
         "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
         "sender": "ai", "sender_name": agent.get("name", "AI"),
-        "text": resp["reply"], "cards": resp.get("cards", []),
+        "text": resp["reply"], "cards": [],
         "meta": {"intent": intent, "actions": action_results, "language": lang},
         "created_at": now_iso(),
     }
     await db.messages.insert_one(ai_msg.copy())
+    await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
+
+    # Optional follow-up message (two-bubble style) — with cards
+    follow_up_text = resp.get("follow_up")
+    last_text_for_preview = resp["reply"]
+    if follow_up_text or resp.get("cards"):
+        follow_msg = {
+            "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
+            "sender": "ai", "sender_name": agent.get("name", "AI"),
+            "text": follow_up_text or "",
+            "cards": resp.get("cards", []),
+            "meta": {"follow_up": True, "language": lang},
+            "created_at": now_iso(),
+        }
+        await db.messages.insert_one(follow_msg.copy())
+        await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": follow_msg})
+        if follow_up_text:
+            last_text_for_preview = follow_up_text
 
     await db.conversations.update_one(
         {"id": conv_id},
         {"$set": {
-            "last_message": resp["reply"], "last_message_at": now_iso(),
+            "last_message": last_text_for_preview, "last_message_at": now_iso(),
             "intent": intent, "structure": structure, "agent_id": agent.get("id"),
             "status": "ai", "language": lang,
             "tags": list(set((convo.get("tags") or []) + auto_tags)),
         }, "$inc": {"unread": 1}},
     )
 
-    await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
-
     return {
         "conversation_id": conv_id,
         "reply": resp["reply"],
+        "follow_up": resp.get("follow_up"),
         "cards": resp.get("cards", []),
         "intent": intent, "structure": structure,
         "actions": action_results, "language": lang,

@@ -26,27 +26,38 @@
 .mini img{width:100%;height:100%;object-fit:cover;display:block}
 .mini::after,.mini::before{content:none!important;display:none!important}
 .row.me .mini{visibility:hidden}
-.msg{max-width:78%;padding:10px 13px;border-radius:16px;font-size:14px;line-height:1.4;white-space:pre-wrap;word-wrap:break-word}
-.me .msg{background:#0069FE;color:#fff;border-bottom-right-radius:4px}
-.bot .msg{background:#fff;border:1px solid #E5EAF2;border-bottom-left-radius:4px}
+.row{animation:slideIn .28s ease-out both}
+@keyframes slideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.msg{max-width:78%;padding:11px 15px;border-radius:22px;font-size:14px;line-height:1.45;white-space:pre-wrap;word-wrap:break-word;box-shadow:0 1px 2px rgba(11,19,36,.04)}
+.me .msg{background:#0069FE;color:#fff;border-bottom-right-radius:6px}
+.bot .msg{background:#fff;border:1px solid #E5EAF2;color:#0B1324;border-bottom-left-radius:6px}
+.row.continuation{margin-top:-6px}
+.row.continuation.bot .mini{visibility:hidden}
+.row.continuation.bot .msg{border-top-left-radius:12px}
 .ice{display:flex;flex-wrap:wrap;gap:6px;margin-left:34px;margin-top:2px}
-.ice button{background:#fff;border:1px solid #C7DDFF;color:#0069FE;padding:7px 12px;border-radius:18px;font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
-.ice button:hover{background:#EAF2FF}
-.card{border:1px solid #E5EAF2;border-radius:14px;overflow:hidden;background:#fff;margin-left:34px;margin-top:4px;box-shadow:0 1px 3px rgba(0,0,0,.04);max-width:300px}
-.card img{width:100%;height:130px;object-fit:cover;background:#EEF2F7;display:block}
-.card .b{padding:10px 12px}
-.card .t{font-weight:600;font-size:14px;line-height:1.3}
-.card .p{color:#0069FE;font-size:14px;font-weight:700;margin-top:3px}
-.card .d{font-size:12px;color:#5B6B82;margin-top:5px;line-height:1.4}
-.card a{display:block;padding:9px 12px;text-align:center;background:#0069FE;color:#fff;text-decoration:none;font-size:13px;font-weight:600}
+.ice button{background:#fff;border:1px solid #C7DDFF;color:#0069FE;padding:7px 13px;border-radius:999px;font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
+.ice button:hover{background:#EAF2FF;transform:translateY(-1px)}
+.card{border:1px solid #E5EAF2;border-radius:18px;overflow:hidden;background:#fff;margin-left:34px;margin-top:6px;box-shadow:0 4px 16px rgba(11,19,36,.06);max-width:300px;transition:transform .2s,box-shadow .2s;animation:slideIn .3s ease-out both}
+.card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,105,254,.18)}
+.card .imgwrap{position:relative;width:100%;height:160px;background:linear-gradient(135deg,#EAF2FF 0%,#C7DDFF 100%);overflow:hidden}
+.card .imgwrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
+.card:hover .imgwrap img{transform:scale(1.04)}
+.card .tag{position:absolute;top:10px;left:10px;background:rgba(11,19,36,.82);backdrop-filter:blur(8px);color:#fff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em}
+.card .b{padding:13px 14px 10px}
+.card .t{font-weight:700;font-size:14.5px;line-height:1.3;color:#0B1324;letter-spacing:-.01em}
+.card .loc{font-size:12px;color:#5B6B82;margin-top:3px;display:flex;align-items:center;gap:4px}
+.card .loc::before{content:"📍";font-size:11px}
+.card .p{color:#0069FE;font-size:15px;font-weight:800;margin-top:8px;letter-spacing:-.01em}
+.card .d{font-size:12.5px;color:#5B6B82;margin-top:6px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.card a{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;text-align:center;background:#0069FE;color:#fff;text-decoration:none;font-size:13px;font-weight:600;transition:background .15s}
 .card a:hover{background:#0057D5}
 .inp{display:flex;gap:8px;padding:12px;border-top:1px solid #E5EAF2;background:#fff}
-.inp input{flex:1;padding:11px 14px;border:1px solid #E5EAF2;border-radius:22px;font:inherit;outline:none;font-size:14px}
+.inp input{flex:1;padding:11px 16px;border:1px solid #E5EAF2;border-radius:999px;font:inherit;outline:none;font-size:14px;transition:all .15s}
 .inp input:focus{border-color:#0069FE;box-shadow:0 0 0 3px #EAF2FF}
-.inp button{background:#0069FE;color:#fff;border:0;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center}
-.inp button:hover{background:#0057D5}
+.inp button{background:#0069FE;color:#fff;border:0;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.inp button:hover{background:#0057D5;transform:scale(1.05)}
 .inp button:disabled{opacity:.5}
-.typing{margin-left:34px;display:inline-flex;gap:4px;padding:10px 14px;background:#fff;border:1px solid #E5EAF2;border-radius:14px;align-self:flex-start}
+.typing{margin-left:34px;display:inline-flex;gap:4px;padding:12px 16px;background:#fff;border:1px solid #E5EAF2;border-radius:20px;align-self:flex-start;animation:slideIn .2s ease-out both}
 .typing span{width:7px;height:7px;border-radius:50%;background:#C7D0DF;animation:t 1.2s infinite}
 .typing span:nth-child(2){animation-delay:.2s}
 .typing span:nth-child(3){animation-delay:.4s}
@@ -103,9 +114,10 @@ function miniAvatar() {
   return mini;
 }
 
-function botMsg(text, icebreakers, cards) {
+function botMsg(text, icebreakers, cards, opts) {
+  opts = opts || {};
   const row = document.createElement("div");
-  row.className = "row bot";
+  row.className = "row bot" + (opts.continuation ? " continuation" : "");
   row.appendChild(miniAvatar());
   const m = document.createElement("div");
   m.className = "msg";
@@ -116,14 +128,21 @@ function botMsg(text, icebreakers, cards) {
   (cards || []).forEach(c => {
     const card = document.createElement("div");
     card.className = "card";
-    let html = "";
-    if (c.image) html += '<img src="' + c.image + '" onerror="this.style.display=\'none\'">';
-    html += '<div class="b"><div class="t">' + (c.title || "") + '</div>';
-    if (c.price) html += '<div class="p">' + c.price + '</div>';
-    if (c.description) html += '<div class="d">' + c.description + '</div>';
-    html += '</div>';
-    if (c.link) html += '<a href="' + c.link + '" target="_blank" rel="noreferrer">Ver mais →</a>';
-    card.innerHTML = html;
+    const imgHtml = c.image
+      ? '<div class="imgwrap"><img src="' + c.image + '" onerror="this.parentElement.style.background=\'linear-gradient(135deg,#EAF2FF,#C7DDFF)\';this.style.display=\'none\'">' + (c.price ? '<span class="tag">' + c.price + '</span>' : '') + '</div>'
+      : '';
+    let body = '<div class="b"><div class="t">' + (c.title || "") + '</div>';
+    if (c.description && c.description.indexOf("Localização") === -1) {
+      const loc = (c.description.match(/([A-Z][a-záãéêíóúçâ]+(?:,\s*[A-Z][a-záãéêíóúçâ]+)?)/) || [])[0];
+      if (loc && loc.length < 40) body += '<div class="loc">' + loc + '</div>';
+    }
+    if (c.price && !c.image) body += '<div class="p">' + c.price + '</div>';
+    if (c.description) body += '<div class="d">' + c.description + '</div>';
+    body += '</div>';
+    const linkHtml = c.link
+      ? '<a href="' + c.link + '" target="_blank" rel="noreferrer">Ver detalhes <span style="font-size:14px">→</span></a>'
+      : '';
+    card.innerHTML = imgHtml + body + linkHtml;
     msgs.appendChild(card);
   });
 
@@ -170,7 +189,19 @@ async function send(text) {
     });
     const j = await r.json();
     typing.remove();
-    botMsg(j.reply || "…", [], j.cards || []);
+    // First bubble — short message
+    botMsg(j.reply || "…", [], []);
+    // Second bubble — follow-up + cards (with natural delay for human feel)
+    if (j.follow_up || (j.cards && j.cards.length > 0)) {
+      const typing2 = document.createElement("div");
+      typing2.className = "typing";
+      typing2.innerHTML = "<span></span><span></span><span></span>";
+      msgs.appendChild(typing2);
+      msgs.scrollTop = msgs.scrollHeight;
+      await new Promise(r => setTimeout(r, 900));
+      typing2.remove();
+      botMsg(j.follow_up || "", [], j.cards || [], { continuation: true });
+    }
   } catch (err) {
     typing.remove();
     botMsg("Erro de ligação. Por favor tente novamente.", [], []);

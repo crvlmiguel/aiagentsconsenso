@@ -95,22 +95,28 @@ Análise da última mensagem:
 - Necessidades: {', '.join(structure.get('needs', [])) or 'n/a'}
 
 INSTRUÇÕES DE RESPOSTA (CRÍTICO, OBRIGATÓRIO):
-- Responde SEMPRE em {reply_lang}. Se o idioma for 'pt', usa Português Europeu (pt-PT), NUNCA português do Brasil.
-- A resposta tem DE ser APENAS JSON válido neste formato EXATO:
-  {{"reply": "texto", "cards": [{{"title": "...", "price": "...", "image": "https://...", "link": "https://...", "description": "..."}}]}}
+- IDIOMA: Responde SEMPRE no MESMO IDIOMA em que o cliente te escreveu (detectado: {reply_lang}). Se pt → Português Europeu (pt-PT, NUNCA pt-BR). Se en → Inglês. Se es → Espanhol. Se fr → Francês. Se de → Alemão. Se it → Italiano. Mantém o tom profissional, amigável e consultivo em qualquer idioma.
+- FORMATO DA RESPOSTA: APENAS JSON válido neste formato EXATO:
+  {{"reply": "mensagem 1", "follow_up": "mensagem 2 (opcional)", "cards": [{{"title": "...", "price": "...", "image": "https://...", "link": "https://...", "description": "..."}}]}}
+- MENSAGENS CURTAS (CRÍTICO): mensagens devem ser CURTAS, diretas e conversacionais (estilo WhatsApp), NÃO blocos de texto longos.
+  • Se a resposta for simples → UM balão em "reply" (1-2 frases, max 280 caracteres).
+  • Se a resposta for mais rica (apresentar opções + pergunta qualificadora) → divide em DOIS balões: "reply" = contexto/apresentação curta, "follow_up" = pergunta ou call-to-action curto.
+  • NUNCA escrevas parágrafos grandes. Prefere sempre 2 mensagens curtas a 1 mensagem longa.
 - REGRAS SOBRE CARDS (NÃO QUEBRAR):
-  1. Se existem [ITEM ...] nos "Dados recuperados", tens de incluir 1-4 como cards, copiando EXATAMENTE title/price/image/link/description dessa lista.
+  1. Se existem [ITEM ...] nos "Dados recuperados", inclui 1-4 como cards, copiando EXATAMENTE title/price/image/link/description.
   2. NUNCA inventes preços, imagens, links ou itens. Só uses o que está nos "Dados recuperados".
   3. Se não houver [ITEM ...] relevantes, devolve "cards": [].
   4. NUNCA devolvas apenas texto sem o campo "cards" — se não houver items, "cards": [] é obrigatório.
-- O campo "reply" deve ser conversacional (1-3 parágrafos), sem mencionar JSON, cards, ou dados internos.
-- Se a mensagem do utilizador é sobre preço, produto, imóvel, ou catálogo — procura itens relevantes nos Dados recuperados e devolve cards.
+- O campo "reply" e "follow_up" devem ser conversacionais, sem mencionar JSON, cards, ou dados internos.
 
-EXEMPLO (não copies literalmente; usa como formato):
-Utilizador: "Procuro T3 em Lisboa"
-Dados recuperados: [ITEM 1] title=T3 Campo de Ourique | price=€475 000 | link=https://... | image=https://...
+EXEMPLO BOM (2 balões, curtos):
+Utilizador: "Quero um T2 em Lisboa"
+Dados recuperados: [ITEM 1] title=T2 Chiado ...
 Resposta válida:
-{{"reply": "Com base nas opções disponíveis, tenho estas sugestões para si em Lisboa. Gostaria de agendar uma visita?", "cards": [{{"title": "T3 Campo de Ourique", "price": "€475 000", "image": "https://...", "link": "https://...", "description": "..."}}]}}
+{{"reply": "Boa! Tenho esta opção no Chiado que pode encaixar no seu perfil.", "follow_up": "Qual o seu orçamento e se prefere zona histórica ou mais moderna?", "cards": [{{"title": "T2 Chiado", ...}}]}}
+
+EXEMPLO MAU (evitar — 1 mensagem longa):
+{{"reply": "Com base no que me diz, tenho esta excelente opção no Chiado que combina localização central, acabamentos modernos, e um preço competitivo. Gostaria de saber qual o seu orçamento aproximado e se tem preferência por zona histórica ou zona mais moderna para eu poder refinar a minha sugestão.", "cards": [...]}}
 """
 
     turns = []
@@ -139,15 +145,21 @@ Resposta válida:
 
     data = extract_json(raw)
     reply_text = data.get("reply") if isinstance(data, dict) else None
+    follow_up = data.get("follow_up") if isinstance(data, dict) else None
     cards = data.get("cards") if isinstance(data, dict) else None
 
     if not reply_text:
         # fallback: treat raw as plain text
         reply_text = raw if raw else "Obrigado pela sua mensagem — a nossa equipa responderá em breve."
         cards = []
+        follow_up = None
 
     if not isinstance(cards, list):
         cards = []
+    if follow_up is not None and not isinstance(follow_up, str):
+        follow_up = None
+    if follow_up:
+        follow_up = follow_up.strip() or None
 
     # Clean cards
     safe_cards = []
@@ -162,4 +174,4 @@ Resposta válida:
             "description": str(c.get("description", ""))[:400],
         })
 
-    return {"reply": reply_text, "cards": safe_cards, "language": reply_lang}
+    return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
