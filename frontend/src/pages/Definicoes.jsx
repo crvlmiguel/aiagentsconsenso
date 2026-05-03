@@ -8,7 +8,7 @@ const Definicoes = () => {
   const [copied, setCopied] = useState("");
 
   const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
-  const widgetPageUrl = `${process.env.REACT_APP_BACKEND_URL}/widget/${tenant?.id}?api=${encodeURIComponent(API)}&tenant=${tenant?.id}`;
+  const widgetPageUrl = `${process.env.REACT_APP_BACKEND_URL}/api/widget/${tenant?.id}?api=${encodeURIComponent(API)}&tenant=${tenant?.id}`;
   const embedSnippet = `<!-- Widget Consenso+ -->
 <iframe
   src="${widgetPageUrl}"

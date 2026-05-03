@@ -61,15 +61,19 @@ const Painel = () => {
         <div className="card-surface p-5">
           <div className="font-display font-semibold">Leads por estado</div>
           <p className="text-xs text-[#5B6B82] mt-0.5">Funil de qualificação.</p>
-          <div className="mt-4" style={{ width: "100%", height: 260 }}>
-            <ResponsiveContainer>
-              <PieChart>
-                <Pie data={stats.by_stage} dataKey="count" nameKey="stage" innerRadius={55} outerRadius={90} paddingAngle={2}>
-                  {stats.by_stage.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5EAF2", borderRadius: 10 }} />
-              </PieChart>
-            </ResponsiveContainer>
+          <div className="mt-4" style={{ width: "100%", height: 260, minHeight: 260 }}>
+            {stats.by_stage && stats.by_stage.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie data={stats.by_stage} dataKey="count" nameKey="stage" innerRadius={55} outerRadius={90} paddingAngle={2}>
+                    {stats.by_stage.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                  </Pie>
+                  <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5EAF2", borderRadius: 10 }} />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-[#5B6B82]">Sem leads ainda.</div>
+            )}
           </div>
         </div>
       </div>

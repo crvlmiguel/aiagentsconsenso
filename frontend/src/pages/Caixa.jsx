@@ -48,20 +48,32 @@ const Caixa = () => {
 
   // WebSocket live updates
   useEffect(() => {
-    const tenantId = JSON.parse(atob(localStorage.getItem("cp_token").split(".")[1])).tenant_id;
+    const token = localStorage.getItem("cp_token");
+    if (!token) return;
+    const tenantId = JSON.parse(atob(token.split(".")[1])).tenant_id;
     const wsUrl = API.replace(/^http/, "ws") + `/ws/${tenantId}`;
-    const ws = new WebSocket(wsUrl);
-    wsRef.current = ws;
-    ws.onmessage = (e) => {
-      try {
-        const payload = JSON.parse(e.data);
-        if (payload.type === "message" || payload.type === "conversation_update") {
-          loadConvos();
-          if (payload.conversation_id === selectedId) loadThread(selectedId);
-        }
-      } catch { /* ignore */ }
+    let ws;
+    let cancelled = false;
+    // small delay to avoid StrictMode double-mount tearing down an open socket
+    const t = setTimeout(() => {
+      if (cancelled) return;
+      ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+      ws.onmessage = (e) => {
+        try {
+          const payload = JSON.parse(e.data);
+          if (payload.type === "message" || payload.type === "conversation_update") {
+            loadConvos();
+            if (payload.conversation_id === selectedId) loadThread(selectedId);
+          }
+        } catch { /* ignore */ }
+      };
+    }, 150);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+      if (ws && ws.readyState === WebSocket.OPEN) ws.close();
     };
-    return () => ws.close();
     // eslint-disable-next-line
   }, [selectedId]);
 

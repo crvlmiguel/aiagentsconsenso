@@ -1,51 +1,47 @@
-# Consenso Plus — Product Requirements Document
+# Consenso Plus — PRD (v2.0)
 
-**Original problem statement:** Build a production-grade multi-tenant SaaS "CONSENSO PLUS — AI Business Operating System". NOT a marketing site — only the application. Unified inbox across WhatsApp/Instagram/Telegram/Messenger/Web Chat, AI agents that respond automatically, intent + structure engines, multi-LLM routing (OpenAI/Claude/Gemini), leads/tickets/integrations/team/admin modules.
+**Pivot v2:** PT-PT UI, light-mode design (#0069FE Stripe/Intercom), Chatbot Builder, Data Sources, structured cards, WebSocket live chat, embeddable widget.
 
-## User choices (defaults)
-- Scope: Auth + multi-tenant + Unified Inbox + AI Agents + Web Chat Widget + simulated other channels
-- AI: Emergent Universal LLM Key (OpenAI, Anthropic, Gemini)
-- Memory: MongoDB (no pgvector)
-- CRMs: Generic webhook + UI-only stubs
+## Arquitetura
+- **Backend FastAPI v2.0**: `server.py`, `auth.py`, `models.py`, `ai/{router,intent,structure,orchestrator,tools,retrieval}.py`, `ws_manager.py`, `seed.py`
+- **Frontend React 19**: light mode branded UI. Rotas PT: `/iniciar-sessao`, `/registar`, `/app/{painel,caixa,construtor,agentes,fontes,leads,tickets,canais,equipa,admin,definicoes}`
 
-## Architecture
-- **Backend**: FastAPI + Motor Mongo. `server.py` with `auth.py`, `models.py`, `ai/{router,intent,structure,orchestrator,tools}.py`, `seed.py`
-- **Frontend**: React 19 + Tailwind + shadcn. Dark brutalist (`rounded-none`, `#FF5500` AI accent, Chivo + JetBrains Mono). Routes: `/login`, `/register`, `/app/{inbox,agents,leads,tickets,integrations,analytics,team,admin,settings}`.
+## Implementado (2026-05-03 v2.0)
+- Auth multi-tenant (JWT + bcrypt)
+- Pipeline AI: intent → structure → retrieval (keyword sobre chunks das fontes) → orchestrator → router multi-LLM (OpenAI/Claude/Gemini via `emergentintegrations` + Emergent LLM Key) → ferramentas → resposta **{reply, cards[], language}**
+- Deteção automática de idioma (langdetect); resposta obrigatória em Português Europeu
+- Caixa de entrada 3-painéis estilo Intercom com WebSocket live
+- Construtor (wizard 4 passos: Modelo → Instruções → Dados → Ativar) com 4 templates (Imobiliária, Suporte, E-commerce, Clínica)
+- Agentes IA CRUD + tester "Executar pipeline completo"
+- **Fontes de dados**: URL scraping (BeautifulSoup, heurística items/cards), texto inline, reindexação
+- **Cards estruturados**: AI devolve title/price/image/link renderizados como cards no chat + widget
+- Leads com tags, score, CRM sync (stub)
+- Tickets, Canais & CRM, Equipa, Admin, Definições (com snippet de incorporação iframe)
+- Widget de chat ao vivo embutível em `/api/widget/{tenant_id}` — HTML standalone com estilo próprio, fala com `/api/webchat/{tenant_id}/message`
 
-## What's implemented (2026-05-03)
-- JWT auth, bcrypt, multi-tenant data isolation
-- Full AI pipeline: intent → structure → orchestrator → multi-LLM router (via `emergentintegrations`) → tool execution → reply storage
-- Unified Inbox (3-pane Intercom-style): list + thread + AI analysis/simulator panel
-- Conversation: takeover / release / close / tag, real-time human chat, AI pauses on human takeover
-- Agents CRUD + live `RUN FULL PIPELINE` tester (returns intent/structure/decision/reply JSON)
-- Leads CRUD with stage dropdown + score progress
-- Tickets CRUD with priority + status
-- Integrations: 5 channels + 4 CRM stubs with connect/disconnect toggle
-- Analytics: KPI grid + channel bar chart + lead stage pie chart
-- Team invite + remove
-- Platform Admin page (restricted to `platform_admin` role)
-- Settings: workspace info, webchat endpoint, embed snippet, model registry
-- Public webchat endpoint `/api/webchat/{tenant_id}/message`
-- Authenticated simulator `/api/inbound/simulate`
-- Seed script creates demo tenant `demo@consenso.plus / demo1234` (Acme Corp) with 3 conversations, agent "Aria", integrations
+## Seed (PT-PT)
+Tenant "Imobiliária Lisboa", owner Maria Silva (demo@consenso.plus / demo1234), agente "Aria — Assistente Imobiliária" ligada à fonte "Catálogo de imóveis (demo)" com 4 imóveis; 3 conversas (Ana, João, Rita) nos canais webchat/whatsapp/instagram; 1 lead, 1 ticket, 10 integrações (5 canais + 4 CRM + 1 email).
 
-## Test credentials
-- `demo@consenso.plus` / `demo1234` (owner of Acme Corp)
+## Testing subagent (iteração 2)
+- Backend: **19/19 testes pass** (incluindo AI pipeline com cards, deteção de idioma, CRUD de fontes, WebSocket, widget)
+- Frontend: ~90% validado. Problemas corrigidos:
+  - HIGH: snippet embed usava `/widget/` sem prefixo `/api` → apanhado pelo ingress → corrigido em Definicoes.jsx
+  - MEDIUM: pie chart com sizing race → min-height + fallback empty state
+  - LOW: WS fechava em double-mount StrictMode → delay + cleanup-safe
 
-## P0 backlog (next)
-- WebSocket-based real-time inbox updates
-- Real WhatsApp Cloud webhook + Telegram Bot inbound
-- Embeddable Web Chat widget (iframe or JS SDK)
-- Vector memory for agent knowledge (Mongo Atlas Search or embeddings)
+## Backlog P0
+- Real integrations: Telegram Bot webhook, WhatsApp Cloud webhook
+- File upload real (object storage) para PDFs/DOCX
+- Rate limiting no /api/webchat público
 
-## P1 backlog
-- Knowledge base files (upload via object storage)
-- OAuth CRM wiring (HubSpot, Pipedrive, Salesforce)
-- Per-agent routing rules (tags → agent)
-- Audit log + role-based permissions beyond owner/admin/agent
+## Backlog P1
+- Vector embeddings (Mongo Atlas Search) em vez de keyword match
+- CRM sync real (HubSpot OAuth, Pipedrive API)
+- SMTP envio real
+- Multi-agente por tenant com routing por regras
 
-## P2 backlog
-- Workflow builder UI
-- SLA policies for tickets
-- Email channel
-- Usage-based billing (Stripe)
+## Backlog P2
+- Workflow builder visual
+- Stripe usage billing (tokens/tenant)
+- SLA nos tickets
+- Split `server.py` em routers (já >700 linhas)
