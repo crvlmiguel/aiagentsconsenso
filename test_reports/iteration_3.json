@@ -1,0 +1,43 @@
+{
+  "summary": "Tested v2.x Consenso+ MVP fixes (per-agent API config, channel config dialogs, SMTP, PT-PT errors, chatbot test slide-over). Backend: 13/13 pytest tests pass in /app/backend/tests/test_v2_config.py. Verified inline /api/test-connection (emergent ok, openai invalid key returns ok:false), /api/agents/{id}/test-connection (Aria returns ok:true with gemini/gemini-2.5-flash), agent with provider=openai+empty key returns 400 with PT message 'Por favor configure a API da IA para ativar o agente.', Aria PT pipeline returns reply+cards+intent+structure with language=pt, /api/inbound/simulate returns structured payload, integration validation enforces required fields per kind (whatsapp: access_token+phone_number_id; instagram: access_token+page_id; telegram: bot_token; smtp: host+port+from_email) with 400 + PT message 'Configuração incompleta. Campos em falta: ...', WhatsApp connect with valid config persists across GET, /integrations/{id}/test-email gracefully returns ok:false (no 500) for fake SMTP, tenant isolation verified (TEST tenant cannot see Aria). Frontend Agentes: 'Configuração da API de IA' panel renders Provider, Modelo, Chave API + 'Testar ligação' button — clicking shows 'Ligado · gemini/gemini-2.5-flash' green badge; alert 'Por favor configure a API da IA para ativar o agente.' is visible; 'Testar chatbot' opens slide-over with chat-input/btn-send-chat/btn-close-chat. Frontend Canais: all 6 channel cards expose btn-configure-{kind} (whatsapp/instagram/telegram/messenger/webchat/smtp); all 4 CRM cards (hubspot/pipedrive/salesforce/webhook) show 'Em breve' disabled buttons; WhatsApp dialog shows access_token + phone_number_id + Webhook URL banner; saving with empty fields shows toast 'Configuração incompleta. Campos em falta: access_token, phone_number_id'. PT-PT throughout.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "PUT /api/integrations/{id}", "issue": "Config merge keeps stale field values when caller passes config:{} — sending empty config does NOT reset existing fields. Caller must explicitly send empty strings to clear. Could surprise UI clients trying to 'reset' a channel. Currently safe because the validator still enforces required fields on connect — but worth documenting."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "All authenticated pages", "issues": ["'Made with Emergent' badge floats over bottom-right corner — overlaps the chat input area when the slide-over chat is open in Agentes, but doesn't actually block clicks. Cosmetic."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_v2_config.py",
+    "/app/test_reports/pytest/v2_config_results.xml"
+  ],
+  "action_items": [
+    "OPTIONAL: Update PUT /api/integrations/{int_id} to treat config:{} as 'replace, not merge' OR document in API contract that callers must send empty-string overrides to clear stale fields.",
+    "OPTIONAL: previous iteration_2 still-open items — Definicoes.jsx widget URL must use /api/widget/{id} (not /widget/{id}) because ingress hijacks non-/api routes; PieChart 'Leads por estado' container sizing race; WS early-close on first mount."
+  ],
+  "critical_code_review_comments": [
+    "server.py is now ~896 lines (was 760 in v2.0) — past the 700-line threshold. Split into routers/{auth,agents,data_sources,conversations,integrations,leads,tickets,team,admin,inbound,widget}.py.",
+    "WIDGET_HTML inline string is now 60+ lines inside server.py — move to /app/backend/static/widget.html and serve via FileResponse.",
+    "_agent_is_configured returns a tuple but is duplicated logic across /agents/{id}/test, /agents/{id}/test-connection, and _process_inbound. OK for now, but if more entrypoints are added, factor into a single guard decorator.",
+    "_process_inbound: agent selection picks FIRST active agent — if a tenant has multiple active agents, routing is non-deterministic. Carry over from iteration_2.",
+    "Integration validation list is hard-coded inline in update_integration — extract to models.py (REQUIRED_FIELDS_BY_KIND) so both backend and frontend dialogs share the truth.",
+    "PUT /api/integrations/{id} merges config dict — sending {} doesn't clear stale fields. UI relies on this (sends full config every save) but tests/non-UI clients may be surprised.",
+    "/api/test-connection (no agent_id) is wide open to any authenticated user — could be abused to verify arbitrary OpenAI/Anthropic keys (validity oracle). Consider rate-limiting per tenant or require provider+key+model only (current behavior is fine since the call returns provider name back, but no abuse mitigation)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_v2_config.py (new — 13 tests for v2.x config plumbing)"
+  ],
+  "success_rate": {"backend": "100% (13/13)", "frontend": "100% of v2.x flows verified (Agentes API config + Test connection + slide-over open; Canais Configurar dialogs + Em breve + error toast)"},
+  "test_credentials": "demo@consenso.plus / demo1234 — tenant 'Imobiliária Lisboa'",
+  "seed_data_creation": "No new seed needed — used existing Imobiliária Lisboa tenant, Aria agent, and seed integrations (whatsapp/instagram/telegram/messenger/webchat/smtp/hubspot/pipedrive/salesforce/webhook). Tests register a TEST_ tenant for isolation check and clean it up; create+delete TEST_NoKey_* agents.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Two pytest files now exist: /app/backend/tests/backend_test.py (v2.0 baseline — 19 tests) and /app/backend/tests/test_v2_config.py (v2.x config — 13 tests). Run both: cd /app/backend && python -m pytest tests/ -v --junitxml=/app/test_reports/pytest/all.xml. data-testids verified live: btn-test-connection, btn-test-chatbot, btn-close-chat, chat-input, btn-send-chat, agent-api-provider, btn-configure-{whatsapp|instagram|telegram|messenger|webchat|smtp}, config-dialog-whatsapp, cfg-access_token, cfg-phone_number_id, btn-save-config, btn-coming-{hubspot|pipedrive|salesforce|webhook}. Note: SMTP dialog field selectors (cfg-host, cfg-port, cfg-from_email, btn-test-email) were not reachable in last run because the WhatsApp dialog overlay was still mounted — main agent or next tester should verify SMTP dialog by closing prior dialogs first (page reload or explicit X click). Backend Aria pipeline is healthy, EMERGENT_LLM_KEY working (gemini-2.5-flash returns ~5-15s replies).",
+  "rca of the issue": "Two prior 'AI service unavailable' RCAs are now confirmed FIXED: (1) /agents/{id}/test on agent without API key now returns 400 + PT message instead of 500; (2) /integrations/{id} now validates required fields by kind and returns 400 'Configuração incompleta. Campos em falta: ...' instead of silently connecting an empty channel. Both verified via pytest (test_agent_openai_empty_key_blocks_test, test_whatsapp_missing_fields_blocks_connect) and via live UI (toast in canais_wa_dialog screenshot reading 'Configuração incompleta. Campos em falta: access_token, phone_number_id')."
+}

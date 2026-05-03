@@ -15,12 +15,14 @@ Schema (strict):
 Return JSON only. No prose."""
 
 
-async def classify_intent(text: str, session_id: str) -> dict:
+async def classify_intent(text: str, session_id: str, api_provider: str = "emergent", api_key: str = "") -> dict:
     out = await llm_complete(
         system_message=INTENT_SYSTEM,
         user_text=f"Message: {text}",
         session_id=f"intent-{session_id}",
         task="fast",
+        api_provider=api_provider,
+        api_key=api_key,
     )
     data = extract_json(out)
     return {

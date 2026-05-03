@@ -26,12 +26,14 @@ Schema (strict, JSON only):
 Return JSON only. No prose."""
 
 
-async def structure_message(text: str, channel: str, session_id: str) -> dict:
+async def structure_message(text: str, channel: str, session_id: str, api_provider: str = "emergent", api_key: str = "") -> dict:
     out = await llm_complete(
         system_message=STRUCTURE_SYSTEM,
         user_text=f"Channel: {channel}\nMessage: {text}",
         session_id=f"structure-{session_id}",
         task="reasoning",
+        api_provider=api_provider,
+        api_key=api_key,
     )
     data = extract_json(out)
     return {

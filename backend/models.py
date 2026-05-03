@@ -67,12 +67,15 @@ class Agent(BaseModel):
     goal: str = "Ajudar clientes"
     system_prompt: str = "És um assistente útil."
     rules: str = ""
+    api_provider: Literal["emergent", "openai", "anthropic", "gemini"] = "emergent"
+    api_key: str = ""
     model_provider: Literal["openai", "anthropic", "gemini", "auto"] = "auto"
     model_name: str = "gpt-5.1"
     tools: List[AgentTool] = Field(default_factory=list)
     knowledge: str = ""
     data_source_ids: List[str] = Field(default_factory=list)
     default_language: str = "pt"
+    notify_email: str = ""
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
@@ -83,12 +86,15 @@ class AgentInput(BaseModel):
     goal: str = "Ajudar clientes"
     system_prompt: str = "És um assistente útil."
     rules: str = ""
+    api_provider: str = "emergent"
+    api_key: str = ""
     model_provider: str = "auto"
     model_name: str = "gpt-5.1"
     tools: List[AgentTool] = Field(default_factory=list)
     knowledge: str = ""
     data_source_ids: List[str] = Field(default_factory=list)
     default_language: str = "pt"
+    notify_email: str = ""
     active: bool = True
 
 

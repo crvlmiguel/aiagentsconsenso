@@ -125,6 +125,8 @@ INSTRUÇÕES DE RESPOSTA (CRÍTICO):
         task="reasoning" if intent.get("urgency") in {"high", "urgent"} else "fast",
         provider=provider if provider != "auto" else None,
         model=model if provider != "auto" else None,
+        api_provider=agent.get("api_provider") or "emergent",
+        api_key=agent.get("api_key") or "",
     )
 
     data = extract_json(raw)

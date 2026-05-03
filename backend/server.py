@@ -26,6 +26,8 @@ from ai.structure import structure_message
 from ai.orchestrator import decide_actions, generate_response
 from ai.tools import execute_actions
 from ai.retrieval import scrape_url, build_chunks, retrieve
+from ai.router import test_connection as llm_test_connection, LLMConfigMissing, LLMProviderError
+from email_service import send_email, render_lead_email
 from ws_manager import manager as ws_manager
 
 from langdetect import detect as detect_lang, DetectorFactory
@@ -50,6 +52,25 @@ def _detect(text: str, default: str = "pt") -> str:
         return code[:2] if code else default
     except Exception:
         return default
+
+
+async def _notify_new_lead(tenant_id: str, lead_id: str, agent: dict) -> None:
+    """Send an email notification if the tenant has an SMTP integration configured."""
+    smtp = await db.integrations.find_one({"tenant_id": tenant_id, "kind": "smtp", "status": "connected"}, {"_id": 0})
+    if not smtp:
+        return
+    cfg = smtp.get("config") or {}
+    to = agent.get("notify_email") or cfg.get("notify_email") or cfg.get("from_email")
+    if not to:
+        return
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        return
+    html = render_lead_email(lead)
+    subject = f"Novo lead · {lead.get('name', '')}"
+    result = send_email(cfg, to, subject, html)
+    logger.info(f"Lead email notify {lead_id} → {to}: {result}")
+    await db.leads.update_one({"id": lead_id}, {"$set": {"email_notified": bool(result.get("ok"))}})
 
 
 # ======================== AUTH ========================
@@ -127,6 +148,40 @@ async def me(claims=Depends(current_user)):
     return {"user": user, "tenant": tenant}
 
 
+def _agent_is_configured(agent: dict) -> tuple[bool, str]:
+    """Validate an agent can run. Returns (ok, error_message_pt)."""
+    prov = (agent.get("api_provider") or "emergent").lower()
+    if prov == "emergent":
+        if not os.environ.get("EMERGENT_LLM_KEY"):
+            return False, "Chave Universal Emergent indisponível. Configure uma chave própria no agente."
+        return True, ""
+    if not (agent.get("api_key") or "").strip():
+        return False, "Por favor configure a API da IA para ativar o agente."
+    if prov not in {"openai", "anthropic", "gemini"}:
+        return False, "Provider de IA não suportado."
+    return True, ""
+
+
+@api.post("/agents/{agent_id}/test-connection")
+async def agent_test_connection(agent_id: str, claims=Depends(current_user)):
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    ok, err = _agent_is_configured(agent)
+    if not ok:
+        return {"ok": False, "error": err, "code": "config_missing"}
+    return await llm_test_connection(agent.get("api_provider", "emergent"), agent.get("api_key", ""), agent.get("model_name"))
+
+
+@api.post("/test-connection")
+async def test_connection_inline(body: dict, claims=Depends(current_user)):
+    """Test a connection WITHOUT saving the agent (useful for config panel)."""
+    prov = body.get("api_provider", "emergent")
+    key = body.get("api_key", "")
+    model = body.get("model_name")
+    return await llm_test_connection(prov, key, model)
+
+
 # ======================== DASHBOARD ========================
 @api.get("/dashboard/stats")
 async def dashboard_stats(claims=Depends(current_user)):
@@ -185,13 +240,22 @@ async def test_agent(agent_id: str, inp: SendMessageInput, claims=Depends(curren
     agent = await db.agents.find_one({"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
     if not agent:
         raise HTTPException(404, "Agente não encontrado")
+    ok, err = _agent_is_configured(agent)
+    if not ok:
+        raise HTTPException(400, err)
     session = f"test-{agent_id}"
-    intent = await classify_intent(inp.text, session)
-    structure = await structure_message(inp.text, "webchat", session)
-    retrieved = await retrieve(db, claims["tenant_id"], inp.text, k=6)
-    decision = decide_actions(intent, structure, agent)
-    lang = _detect(inp.text, agent.get("default_language", "pt"))
-    reply = await generate_response(agent, [{"sender": "user", "text": inp.text}], intent, structure, retrieved, lang, session)
+    ap, ak = agent.get("api_provider", "emergent"), agent.get("api_key", "")
+    try:
+        intent = await classify_intent(inp.text, session, ap, ak)
+        structure = await structure_message(inp.text, "webchat", session, ap, ak)
+        retrieved = await retrieve(db, claims["tenant_id"], inp.text, k=6)
+        decision = decide_actions(intent, structure, agent)
+        lang = _detect(inp.text, agent.get("default_language", "pt"))
+        reply = await generate_response(agent, [{"sender": "user", "text": inp.text}], intent, structure, retrieved, lang, session)
+    except LLMConfigMissing as e:
+        raise HTTPException(400, str(e))
+    except LLMProviderError as e:
+        raise HTTPException(502, str(e))
     return {"intent": intent, "structure": structure, "decision": decision,
             "retrieved": [{"kind": d["kind"], "meta": d.get("meta", {}), "text": d["text"][:200]} for d in retrieved],
             "language": lang, **reply}
@@ -438,20 +502,54 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage) -> dict:
 
     agent = await db.agents.find_one({"tenant_id": tenant_id, "active": True}, {"_id": 0})
     if not agent:
-        agent = {"name": "AI", "tone": "profissional", "goal": "ajudar",
-                 "system_prompt": "És útil.", "rules": "",
-                 "model_provider": "auto", "model_name": "gpt-5.1",
-                 "tools": [], "knowledge": "", "default_language": default_lang}
+        # No active agent — respond with a clear PT message
+        ai_msg = {
+            "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
+            "sender": "ai", "sender_name": "Sistema",
+            "text": "Nenhum agente IA ativo. Vá a Agentes IA e ative ou crie um agente.",
+            "cards": [], "meta": {"error": "no_active_agent"}, "created_at": now_iso(),
+        }
+        await db.messages.insert_one(ai_msg.copy())
+        await db.conversations.update_one({"id": conv_id}, {"$set": {"last_message": ai_msg["text"], "last_message_at": now_iso()}})
+        await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
+        return {"conversation_id": conv_id, "reply": ai_msg["text"], "cards": [], "error": "no_active_agent"}
+
+    ok, err = _agent_is_configured(agent)
+    if not ok:
+        ai_msg = {
+            "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
+            "sender": "ai", "sender_name": agent.get("name", "Sistema"),
+            "text": err, "cards": [], "meta": {"error": "config_missing"}, "created_at": now_iso(),
+        }
+        await db.messages.insert_one(ai_msg.copy())
+        await db.conversations.update_one({"id": conv_id}, {"$set": {"last_message": err, "last_message_at": now_iso()}})
+        await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
+        return {"conversation_id": conv_id, "reply": err, "cards": [], "error": "config_missing"}
 
     session = f"conv-{conv_id}"
-    intent = await classify_intent(inbound.text, session)
-    structure = await structure_message(inbound.text, inbound.channel, session)
+    ap, ak = agent.get("api_provider", "emergent"), agent.get("api_key", "")
+    try:
+        intent = await classify_intent(inbound.text, session, ap, ak)
+        structure = await structure_message(inbound.text, inbound.channel, session, ap, ak)
+    except (LLMConfigMissing, LLMProviderError) as e:
+        ai_msg = {
+            "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
+            "sender": "ai", "sender_name": agent.get("name", "Sistema"),
+            "text": str(e), "cards": [], "meta": {"error": "llm_failure"}, "created_at": now_iso(),
+        }
+        await db.messages.insert_one(ai_msg.copy())
+        await db.conversations.update_one({"id": conv_id}, {"$set": {"last_message": str(e), "last_message_at": now_iso()}})
+        await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
+        return {"conversation_id": conv_id, "reply": str(e), "cards": [], "error": "llm_failure"}
     retrieved = await retrieve(db, tenant_id, inbound.text, k=6)
     decision = decide_actions(intent, structure, agent)
     lang = _detect(inbound.text, agent.get("default_language", default_lang))
 
     history = await db.messages.find({"conversation_id": conv_id}, {"_id": 0}).sort("created_at", 1).to_list(20)
-    resp = await generate_response(agent, history, intent, structure, retrieved, lang, session)
+    try:
+        resp = await generate_response(agent, history, intent, structure, retrieved, lang, session)
+    except (LLMConfigMissing, LLMProviderError) as e:
+        resp = {"reply": str(e), "cards": [], "language": lang}
 
     # Auto-tag lead from structure
     auto_tags = []
@@ -463,10 +561,11 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage) -> dict:
         auto_tags.append(intent["intent"])
 
     action_results = await execute_actions(db, tenant_id, conv_id, decision.get("actions", []))
-    # Attach tags to any lead created
+    # Attach tags + send email notification for AI-created leads
     for a in action_results:
         if a.get("tool") == "create_lead" and a.get("ok"):
             await db.leads.update_one({"id": a["id"]}, {"$set": {"tags": list(set(auto_tags))}})
+            await _notify_new_lead(tenant_id, a["id"], agent)
 
     ai_msg = {
         "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
@@ -591,14 +690,48 @@ async def list_integrations(claims=Depends(current_user)):
 
 @api.put("/integrations/{int_id}")
 async def update_integration(int_id: str, body: dict, claims=Depends(current_user)):
-    allowed = {k: v for k, v in body.items() if k in {"status", "config", "name"}}
-    res = await db.integrations.update_one(
-        {"id": int_id, "tenant_id": claims["tenant_id"]},
-        {"$set": allowed},
-    )
-    if res.matched_count == 0:
+    current = await db.integrations.find_one({"id": int_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
+    if not current:
         raise HTTPException(404, "Não encontrado")
+    allowed = {k: v for k, v in body.items() if k in {"status", "config", "name"}}
+    # Validate config when trying to connect
+    next_status = allowed.get("status", current.get("status"))
+    next_cfg = {**(current.get("config") or {}), **(allowed.get("config") or {})}
+    if allowed.get("config") is not None:
+        allowed["config"] = next_cfg
+    if next_status == "connected":
+        kind = current["kind"]
+        required = {
+            "whatsapp": ["access_token", "phone_number_id"],
+            "instagram": ["access_token", "page_id"],
+            "telegram": ["bot_token"],
+            "messenger": ["access_token", "page_id"],
+            "webchat": [],
+            "smtp": ["host", "port", "from_email"],
+            "hubspot": [], "pipedrive": [], "salesforce": [], "webhook": ["url"],
+        }.get(kind, [])
+        missing = []
+        for k in required:
+            v = next_cfg.get(k)
+            if v is None or (isinstance(v, str) and not v.strip()):
+                missing.append(k)
+        if missing:
+            raise HTTPException(400, f"Configuração incompleta. Campos em falta: {', '.join(missing)}")
+    await db.integrations.update_one({"id": int_id, "tenant_id": claims["tenant_id"]}, {"$set": allowed})
     return await db.integrations.find_one({"id": int_id}, {"_id": 0})
+
+
+@api.post("/integrations/{int_id}/test-email")
+async def integration_test_email(int_id: str, body: dict, claims=Depends(current_user)):
+    it = await db.integrations.find_one({"id": int_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
+    if not it or it["kind"] != "smtp":
+        raise HTTPException(400, "Integração SMTP não encontrada")
+    to = body.get("to") or it.get("config", {}).get("from_email")
+    if not to:
+        raise HTTPException(400, "Indique um destinatário")
+    html = "<p>Olá! Este é um email de teste enviado pelo Consenso Plus. ✔</p>"
+    result = send_email(it.get("config") or {}, to, "Consenso Plus · Email de teste", html)
+    return result
 
 
 # ======================== TEAM ========================
