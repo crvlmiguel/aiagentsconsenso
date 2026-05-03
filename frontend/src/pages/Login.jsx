@@ -2,7 +2,6 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../lib/auth";
 import { toast } from "sonner";
-import { Logo } from "../components/Brand";
 import { Bot, Zap, ShieldCheck, Database } from "lucide-react";
 
 const Login = () => {
@@ -58,7 +57,16 @@ const Login = () => {
 
       <div className="flex items-center justify-center p-6">
         <form data-testid="login-form" onSubmit={onSubmit} className="w-full max-w-sm">
-          <div className="md:hidden mb-8"><Logo size={28} /></div>
+          <div className="mb-10 flex items-center gap-3">
+            <img src="/consenso-icon.png" alt="Consenso+" width={44} height={44}
+              style={{ width: 44, height: 44, objectFit: "contain" }} />
+            <div className="leading-tight">
+              <div className="font-display font-bold text-[22px] text-[#0B1324]">
+                Consenso<span className="text-[#0069FE]">+</span>
+              </div>
+              <div className="text-[11px] text-[#5B6B82] uppercase tracking-wider font-semibold">AI Business OS</div>
+            </div>
+          </div>
           <h2 className="font-display text-3xl font-bold text-[#0B1324]">Iniciar sessão</h2>
           <p className="text-[#5B6B82] mt-1.5 text-sm">Aceda à sua plataforma de agentes IA multilingues.</p>
 

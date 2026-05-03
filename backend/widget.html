@@ -40,6 +40,7 @@
 .card{border:1px solid #E5EAF2;border-radius:18px;overflow:hidden;background:#fff;margin-left:34px;margin-top:6px;box-shadow:0 4px 16px rgba(11,19,36,.06);max-width:300px;transition:transform .2s,box-shadow .2s;animation:slideIn .3s ease-out both}
 .card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,105,254,.18)}
 .card .imgwrap{position:relative;width:100%;height:160px;background:linear-gradient(135deg,#EAF2FF 0%,#C7DDFF 100%);overflow:hidden}
+.card .imgwrap.noimg::before{content:"🏠";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:44px;filter:grayscale(.3) opacity(.55)}
 .card .imgwrap img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .4s}
 .card:hover .imgwrap img{transform:scale(1.04)}
 .card .tag{position:absolute;top:10px;left:10px;background:rgba(11,19,36,.82);backdrop-filter:blur(8px);color:#fff;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.02em}
@@ -129,7 +130,7 @@ function botMsg(text, icebreakers, cards, opts) {
     const card = document.createElement("div");
     card.className = "card";
     const imgHtml = c.image
-      ? '<div class="imgwrap"><img src="' + c.image + '" onerror="this.parentElement.style.background=\'linear-gradient(135deg,#EAF2FF,#C7DDFF)\';this.style.display=\'none\'">' + (c.price ? '<span class="tag">' + c.price + '</span>' : '') + '</div>'
+      ? '<div class="imgwrap"><img src="' + c.image + '" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentElement.classList.add(\'noimg\');this.remove()">' + (c.price ? '<span class="tag">' + c.price + '</span>' : '') + '</div>'
       : '';
     let body = '<div class="b"><div class="t">' + (c.title || "") + '</div>';
     if (c.description && c.description.indexOf("Localização") === -1) {

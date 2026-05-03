@@ -26,9 +26,6 @@ const Caixa = () => {
   const [statusFilter, setStatusFilter] = useState("all");
   const [agentFilter, setAgentFilter] = useState("all");
   const [input, setInput] = useState("");
-  const [simText, setSimText] = useState("");
-  const [simName, setSimName] = useState("Visitante Teste");
-  const [simChannel, setSimChannel] = useState("webchat");
   const [sending, setSending] = useState(false);
   const [newMsgPill, setNewMsgPill] = useState(false);
 
@@ -241,22 +238,6 @@ const Caixa = () => {
     catch { toast.error("Falha"); }
   };
 
-  const simulate = async () => {
-    if (!simText.trim()) return;
-    setSending(true);
-    try {
-      const { data } = await api.post("/inbound/simulate", {
-        channel: simChannel,
-        external_user_id: simName.toLowerCase().replace(/\s+/g, "-"),
-        contact_name: simName, text: simText,
-      });
-      toast.success("IA processou a mensagem.");
-      setSimText("");
-      if (data.conversation_id !== selectedId) setSelectedId(data.conversation_id);
-    } catch { toast.error("Falha na simulação."); }
-    finally { setSending(false); }
-  };
-
   const intent = conversation?.intent;
 
   // Memoize the rendered message list to prevent re-rendering when only the list changes
@@ -423,24 +404,6 @@ const Caixa = () => {
             </div>
           </div>
         )}
-
-        <div className="p-5">
-          <div className="label">Simular mensagem</div>
-          <p className="text-xs text-[#5B6B82] mb-3">Teste o pipeline completo de IA a partir de qualquer canal.</p>
-          <div className="space-y-2">
-            <input data-testid="sim-name" value={simName} onChange={(e) => setSimName(e.target.value)}
-              placeholder="Nome" className="input-base text-sm" />
-            <select data-testid="sim-channel" value={simChannel} onChange={(e) => setSimChannel(e.target.value)} className="input-base text-sm">
-              {["webchat", "whatsapp", "telegram"].map(c => <option key={c}>{c}</option>)}
-            </select>
-            <textarea data-testid="sim-text" value={simText} onChange={(e) => setSimText(e.target.value)}
-              rows={3} placeholder="Mensagem a simular…" className="input-base text-sm" />
-            <button data-testid="btn-simulate" onClick={simulate} disabled={sending}
-              className="btn-primary w-full justify-center">
-              {sending ? "A processar…" : "Enviar para IA →"}
-            </button>
-          </div>
-        </div>
       </div>
     </div>
   );
