@@ -187,11 +187,17 @@ const Agentes = () => {
 
   const backendUrl = process.env.REACT_APP_BACKEND_URL;
   const scriptSnippet = selected?.id
-    ? `<!-- Consenso+ Chatbot -->\n<script src="${backendUrl}/widget.js"\n  data-tenant-id="${selected.tenant_id}"\n  data-agent-id="${selected.id}"\n  defer></script>`
+    ? `<!-- Consenso+ Chatbot -->\n<script src="${backendUrl}/api/widget.js"\n  data-tenant-id="${selected.tenant_id}"\n  data-agent-id="${selected.id}"\n  defer></script>`
     : "";
   const shortcode = selected?.id ? `[consenso_chat agent_id="${selected.id}"]` : "";
+  const phpSnippet = selected?.id
+    ? `// Cole em functions.php do seu tema WordPress (se não usa o plugin oficial):\nadd_shortcode('consenso_chat', function($atts) {\n  $a = shortcode_atts(['agent_id' => '${selected.id}', 'tenant_id' => '${selected.tenant_id}'], $atts);\n  return '<script src="${backendUrl}/api/widget.js" data-tenant-id="' . esc_attr($a['tenant_id']) . '" data-agent-id="' . esc_attr($a['agent_id']) . '" defer></script>';\n});`
+    : "";
   const iframeSrc = selected?.id
     ? `${backendUrl}/api/widget/${selected.tenant_id}?api=${encodeURIComponent(backendUrl + "/api")}&tenant=${selected.tenant_id}&agent=${selected.id}`
+    : "";
+  const testPageUrl = selected?.id
+    ? `${backendUrl}/api/widget-test/${selected.tenant_id}/${selected.id}`
     : "";
 
   const configured = selected && (selected.api_provider === "emergent" || (selected.api_key && selected.api_key.length > 10));
@@ -624,13 +630,24 @@ const Agentes = () => {
                     <Code2 size={16} className="text-[#0069FE]" />
                     <div className="font-display font-semibold">Opção 2 — Shortcode (WordPress)</div>
                   </div>
-                  <p className="text-xs text-[#5B6B82] mb-3">Cole no editor de páginas ou posts do WordPress (requer o plugin Consenso+).</p>
+                  <p className="text-xs text-[#5B6B82] mb-3">Requer o plugin oficial Consenso+ ou a função PHP abaixo em <code>functions.php</code>.</p>
                   <div className="relative">
                     <pre className="bg-[#F7F9FC] border border-[#E5EAF2] rounded-lg p-4 pr-24 text-xs overflow-x-auto">{shortcode || "Guarde o agente primeiro."}</pre>
                     {selected.id && (
                       <button data-testid="btn-copy-shortcode" onClick={() => copy("sc", shortcode)}
                         className="absolute top-2 right-2 btn-ghost text-[11px] py-1">
                         <Copy size={10} /> {copied === "sc" ? "Copiado" : "Copiar"}
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="mt-4 text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">Alternativa: functions.php</div>
+                  <div className="relative mt-1">
+                    <pre className="bg-[#F7F9FC] border border-[#E5EAF2] rounded-lg p-4 pr-24 text-[11px] overflow-x-auto whitespace-pre-wrap">{phpSnippet || "Guarde o agente primeiro."}</pre>
+                    {selected.id && (
+                      <button data-testid="btn-copy-php" onClick={() => copy("php", phpSnippet)}
+                        className="absolute top-2 right-2 btn-ghost text-[11px] py-1">
+                        <Copy size={10} /> {copied === "php" ? "Copiado" : "Copiar"}
                       </button>
                     )}
                   </div>
@@ -649,7 +666,21 @@ const Agentes = () => {
                 {selected.id && (
                   <div className="card-surface p-6">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="font-display font-semibold">Pré-visualização direta</div>
+                      <div>
+                        <div className="font-display font-semibold">Testar em página real</div>
+                        <p className="text-xs text-[#5B6B82] mt-0.5">Abre uma página externa que carrega o script tal como o seu cliente verá.</p>
+                      </div>
+                      <a data-testid="btn-test-real-page" href={testPageUrl} target="_blank" rel="noreferrer" className="btn-primary text-[12px]">
+                        <Zap size={11} /> Abrir página de teste
+                      </a>
+                    </div>
+                  </div>
+                )}
+
+                {selected.id && (
+                  <div className="card-surface p-6">
+                    <div className="flex items-center justify-between mb-3">
+                      <div className="font-display font-semibold">Pré-visualização direta (iframe)</div>
                       <a data-testid="btn-open-widget" href={iframeSrc} target="_blank" rel="noreferrer" className="btn-ghost text-[12px]">
                         <Eye size={11} /> Abrir em separador
                       </a>

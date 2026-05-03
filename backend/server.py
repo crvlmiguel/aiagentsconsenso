@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -952,11 +952,6 @@ def _load_widget() -> str:
         return "<html><body>Widget not found</body></html>"
 
 
-@app.get("/widget/{tenant_id}", response_class=HTMLResponse)
-async def widget(tenant_id: str):
-    return HTMLResponse(_load_widget())
-
-
 @api.get("/widget/{tenant_id}", response_class=HTMLResponse)
 async def widget_api(tenant_id: str):
     return HTMLResponse(_load_widget())
@@ -965,20 +960,75 @@ async def widget_api(tenant_id: str):
 _WIDGET_JS_PATH = ROOT_DIR / "widget.js"
 
 
-@app.get("/widget.js")
-async def widget_js():
+@api.get("/widget.js")
+async def widget_js_api():
     from fastapi.responses import Response
     try:
         content = _WIDGET_JS_PATH.read_text(encoding="utf-8")
     except Exception:
         content = "/* widget.js not found */"
     return Response(content=content, media_type="application/javascript",
-                    headers={"Cache-Control": "public, max-age=300"})
+                    headers={"Cache-Control": "public, max-age=300",
+                             "Access-Control-Allow-Origin": "*"})
 
 
-@api.get("/widget.js")
-async def widget_js_api():
-    return await widget_js()
+@api.get("/widget-test/{tenant_id}/{agent_id}", response_class=HTMLResponse)
+async def widget_test_page(tenant_id: str, agent_id: str, request: Request):
+    """Demo page that loads widget.js as an external site would — for real-world testing."""
+    # Derive public URL from forwarded headers so the displayed snippet matches what the user will paste
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost"
+    proto = request.headers.get("x-forwarded-proto") or ("https" if request.url.scheme == "https" else "http")
+    backend = f"{proto}://{host}"
+    # Use relative /api/widget.js so it works regardless of deployment
+    html = f"""<!doctype html>
+<html lang="pt">
+<head>
+<meta charset="utf-8">
+<title>Consenso+ · Página de teste</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+*{{box-sizing:border-box}}body{{margin:0;font-family:Inter,system-ui,sans-serif;color:#0B1324;background:linear-gradient(180deg,#F7F9FC 0%,#EAF2FF 100%);min-height:100vh}}
+.wrap{{max-width:780px;margin:0 auto;padding:60px 24px}}
+.badge{{display:inline-block;background:#0069FE;color:#fff;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}}
+h1{{font-size:40px;font-weight:700;letter-spacing:-.02em;margin:16px 0 8px}}
+p{{color:#5B6B82;font-size:16px;line-height:1.6;margin:0 0 12px}}
+.card{{background:#fff;border:1px solid #E5EAF2;border-radius:16px;padding:28px;margin-top:32px;box-shadow:0 2px 10px rgba(11,19,36,.04)}}
+.card h2{{font-size:18px;margin:0 0 8px}}
+.arrow{{position:fixed;bottom:100px;right:28px;background:#0B1324;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;animation:b 1.2s infinite}}
+.arrow::after{{content:"";position:absolute;bottom:-7px;right:25px;width:0;height:0;border:8px solid transparent;border-top-color:#0B1324;border-bottom:0}}
+@keyframes b{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-4px)}}}}
+code{{background:#F7F9FC;padding:2px 6px;border-radius:4px;font-size:13px;color:#0069FE}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<span class="badge">Página de teste</span>
+<h1>O seu chatbot em ação</h1>
+<p>Esta é uma página de teste que carrega o mesmo script que o seu cliente vai colar no site dele.</p>
+<p>Deverá ver o <b>ícone azul flutuante</b> no canto inferior direito. Clique para abrir o chat.</p>
+
+<div class="card">
+<h2>Script instalado</h2>
+<p style="font-family:monospace;font-size:12px;background:#F7F9FC;padding:12px;border-radius:8px;white-space:pre-wrap;color:#0B1324">&lt;script src="{backend}/api/widget.js"
+  data-tenant-id="{tenant_id}"
+  data-agent-id="{agent_id}"
+  defer&gt;&lt;/script&gt;</p>
+</div>
+
+<div class="card">
+<h2>Como testar</h2>
+<p>1. Verifique que o ícone azul apareceu no canto inferior direito.</p>
+<p>2. Clique no ícone — deve abrir a janela de chat.</p>
+<p>3. Escreva uma mensagem de cliente (ex: <code>Olá, tenho uma questão</code>).</p>
+<p>4. A IA responde com o agente configurado.</p>
+</div>
+</div>
+<div class="arrow">O ícone aparece aqui ↓</div>
+<script src="/api/widget.js" data-tenant-id="{tenant_id}" data-agent-id="{agent_id}" defer></script>
+</body>
+</html>"""
+    return HTMLResponse(html)
 
 
 # ======================== ROOT ========================
