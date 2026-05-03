@@ -5,10 +5,12 @@ import { Database, Globe, FileText, RefreshCw, Trash2, Plus, CheckCircle2, Alert
 
 const Fontes = () => {
   const [sources, setSources] = useState([]);
-  const [mode, setMode] = useState(null); // "url" | "text" | null
+  const [mode, setMode] = useState(null); // "url" | "text" | "file" | null
   const [urlForm, setUrlForm] = useState({ name: "", url: "" });
   const [textForm, setTextForm] = useState({ name: "", text: "" });
+  const [fileForm, setFileForm] = useState({ name: "", file: null });
   const [busy, setBusy] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   const load = async () => setSources((await api.get("/data-sources")).data);
   useEffect(() => { load(); }, []);
@@ -20,7 +22,7 @@ const Fontes = () => {
       await api.post("/data-sources/url", urlForm);
       toast.success("Fonte indexada.");
       setUrlForm({ name: "", url: "" }); setMode(null); load();
-    } catch (e) { toast.error("Falha ao indexar"); }
+    } catch (e) { toast.error(e?.response?.data?.detail || "Falha ao indexar"); }
     finally { setBusy(false); }
   };
   const addText = async () => {
@@ -33,13 +35,33 @@ const Fontes = () => {
     } catch { toast.error("Falha"); }
     finally { setBusy(false); }
   };
+  const addFile = async () => {
+    if (!fileForm.file) return toast.error("Selecione um ficheiro");
+    const allowed = [".pdf", ".csv", ".json", ".txt", ".md"];
+    const ok = allowed.some(ext => fileForm.file.name.toLowerCase().endsWith(ext));
+    if (!ok) return toast.error(`Formato não suportado. Use: ${allowed.join(", ")}`);
+    if (fileForm.file.size > 10 * 1024 * 1024) return toast.error("Ficheiro muito grande (máx 10MB)");
 
-  const reindex = async (id) => {
-    await api.post(`/data-sources/${id}/reindex`); toast.success("Reindexado"); load();
+    setBusy(true); setProgress(0);
+    try {
+      const fd = new FormData();
+      fd.append("file", fileForm.file);
+      fd.append("name", fileForm.name || fileForm.file.name);
+      await api.post("/data-sources/file", fd, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (e) => {
+          if (e.total) setProgress(Math.round((e.loaded * 100) / e.total));
+        },
+      });
+      toast.success("Ficheiro indexado.");
+      setFileForm({ name: "", file: null }); setMode(null); load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Falha ao indexar ficheiro");
+    } finally { setBusy(false); setProgress(0); }
   };
-  const del = async (id) => {
-    await api.delete(`/data-sources/${id}`); toast.success("Eliminado"); load();
-  };
+
+  const reindex = async (id) => { await api.post(`/data-sources/${id}/reindex`); toast.success("Reindexado"); load(); };
+  const del = async (id) => { await api.delete(`/data-sources/${id}`); toast.success("Eliminado"); load(); };
 
   const kindIcon = { url: Globe, text: FileText, file: FileText };
   const statusBadge = {
@@ -58,6 +80,8 @@ const Fontes = () => {
         <div className="flex gap-2">
           <button data-testid="btn-add-url" onClick={() => setMode(mode === "url" ? null : "url")}
             className="btn-ghost"><Globe size={14} /> Ligar site</button>
+          <button data-testid="btn-add-file" onClick={() => setMode(mode === "file" ? null : "file")}
+            className="btn-ghost"><FileText size={14} /> Ficheiro</button>
           <button data-testid="btn-add-text" onClick={() => setMode(mode === "text" ? null : "text")}
             className="btn-primary"><Plus size={14} /> Adicionar texto</button>
         </div>
@@ -75,6 +99,32 @@ const Fontes = () => {
             <button className="btn-ghost" onClick={() => setMode(null)}>Cancelar</button>
             <button data-testid="btn-save-url" onClick={addUrl} disabled={busy} className="btn-primary">
               {busy ? "A indexar…" : "Indexar agora"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {mode === "file" && (
+        <div className="card-surface p-5" data-testid="file-form">
+          <div className="label">Nome interno</div>
+          <input data-testid="file-name" value={fileForm.name} onChange={(e) => setFileForm({ ...fileForm, name: e.target.value })}
+            placeholder="Ex: Políticas e FAQ (auto-preenche do nome do ficheiro)" className="input-base mb-3" />
+          <div className="label">Ficheiro (PDF, CSV, JSON, TXT, MD · máx 10MB)</div>
+          <input data-testid="file-input" type="file" accept=".pdf,.csv,.json,.txt,.md"
+            onChange={(e) => setFileForm({ ...fileForm, file: e.target.files?.[0] || null, name: fileForm.name || (e.target.files?.[0]?.name || "") })}
+            className="input-base mb-3" />
+          {busy && progress > 0 && (
+            <div className="mb-3">
+              <div className="h-2 bg-[#E5EAF2] rounded-full overflow-hidden">
+                <div className="h-full bg-[#0069FE] transition-all" style={{ width: `${progress}%` }} />
+              </div>
+              <div className="text-[11px] text-[#5B6B82] mt-1">A enviar… {progress}%</div>
+            </div>
+          )}
+          <div className="flex gap-2 justify-end">
+            <button className="btn-ghost" onClick={() => setMode(null)}>Cancelar</button>
+            <button data-testid="btn-save-file" onClick={addFile} disabled={busy || !fileForm.file} className="btn-primary">
+              {busy ? "A indexar…" : "Indexar ficheiro"}
             </button>
           </div>
         </div>

@@ -248,7 +248,7 @@ async def test_agent(agent_id: str, inp: SendMessageInput, claims=Depends(curren
     try:
         intent = await classify_intent(inp.text, session, ap, ak)
         structure = await structure_message(inp.text, "webchat", session, ap, ak)
-        retrieved = await retrieve(db, claims["tenant_id"], inp.text, k=6)
+        retrieved = await retrieve(db, claims["tenant_id"], inp.text, k=6, source_ids=agent.get("data_source_ids") or None)
         decision = decide_actions(intent, structure, agent)
         lang = _detect(inp.text, agent.get("default_language", "pt"))
         reply = await generate_response(agent, [{"sender": "user", "text": inp.text}], intent, structure, retrieved, lang, session)
@@ -319,10 +319,36 @@ async def add_file_source(
     name: str = Form(...),
 ):
     raw = await file.read()
+    text = ""
+    filename = (file.filename or "").lower()
     try:
-        text = raw.decode("utf-8", errors="ignore")
-    except Exception:
-        text = ""
+        if filename.endswith(".pdf"):
+            from io import BytesIO
+            from pypdf import PdfReader
+            reader = PdfReader(BytesIO(raw))
+            parts = []
+            for page in reader.pages[:200]:
+                try:
+                    parts.append(page.extract_text() or "")
+                except Exception:
+                    pass
+            text = "\n".join(parts)
+        elif filename.endswith(".json"):
+            import json as _json
+            try:
+                data = _json.loads(raw.decode("utf-8", errors="ignore"))
+                text = _json.dumps(data, ensure_ascii=False, indent=2)
+            except Exception:
+                text = raw.decode("utf-8", errors="ignore")
+        else:
+            # .txt .md .csv and anything else treated as text
+            text = raw.decode("utf-8", errors="ignore")
+    except Exception as e:
+        raise HTTPException(400, f"Falha a ler o ficheiro: {str(e)[:200]}")
+
+    if not text.strip():
+        raise HTTPException(400, "Ficheiro vazio ou ilegível")
+
     src_id = new_id()
     chunks = build_chunks(src_id, claims["tenant_id"], name, text, [])
     doc = {
@@ -372,6 +398,7 @@ async def list_conversations(
     claims=Depends(current_user),
     channel: Optional[str] = None,
     status: Optional[str] = None,
+    agent_id: Optional[str] = None,
     q: Optional[str] = None,
 ):
     query: dict = {"tenant_id": claims["tenant_id"]}
@@ -379,9 +406,26 @@ async def list_conversations(
         query["channel"] = channel
     if status and status != "all":
         query["status"] = status
+    if agent_id and agent_id != "all":
+        query["agent_id"] = agent_id
     if q:
         query["contact_name"] = {"$regex": q, "$options": "i"}
-    return await db.conversations.find(query, {"_id": 0}).sort("last_message_at", -1).to_list(200)
+    convos = await db.conversations.find(query, {"_id": 0}).sort("last_message_at", -1).to_list(200)
+    # Attach action counts (leads, tickets) linked to each conversation
+    conv_ids = [c["id"] for c in convos]
+    if conv_ids:
+        lead_counts = {}
+        tick_counts = {}
+        async for l in db.leads.find({"conversation_id": {"$in": conv_ids}}, {"_id": 0, "conversation_id": 1}):
+            lead_counts[l["conversation_id"]] = lead_counts.get(l["conversation_id"], 0) + 1
+        async for t in db.tickets.find({"conversation_id": {"$in": conv_ids}}, {"_id": 0, "conversation_id": 1}):
+            tick_counts[t["conversation_id"]] = tick_counts.get(t["conversation_id"], 0) + 1
+        for c in convos:
+            c["action_counts"] = {
+                "leads": lead_counts.get(c["id"], 0),
+                "tickets": tick_counts.get(c["id"], 0),
+            }
+    return convos
 
 
 @api.get("/conversations/{conv_id}")
@@ -541,7 +585,7 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage) -> dict:
         await db.conversations.update_one({"id": conv_id}, {"$set": {"last_message": str(e), "last_message_at": now_iso()}})
         await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
         return {"conversation_id": conv_id, "reply": str(e), "cards": [], "error": "llm_failure"}
-    retrieved = await retrieve(db, tenant_id, inbound.text, k=6)
+    retrieved = await retrieve(db, tenant_id, inbound.text, k=6, source_ids=agent.get("data_source_ids") or None)
     decision = decide_actions(intent, structure, agent)
     lang = _detect(inbound.text, agent.get("default_language", default_lang))
 
@@ -840,6 +884,25 @@ async def widget(tenant_id: str):
 @api.get("/widget/{tenant_id}", response_class=HTMLResponse)
 async def widget_api(tenant_id: str):
     return HTMLResponse(_load_widget())
+
+
+_WIDGET_JS_PATH = ROOT_DIR / "widget.js"
+
+
+@app.get("/widget.js")
+async def widget_js():
+    from fastapi.responses import Response
+    try:
+        content = _WIDGET_JS_PATH.read_text(encoding="utf-8")
+    except Exception:
+        content = "/* widget.js not found */"
+    return Response(content=content, media_type="application/javascript",
+                    headers={"Cache-Control": "public, max-age=300"})
+
+
+@api.get("/widget.js")
+async def widget_js_api():
+    return await widget_js()
 
 
 # ======================== ROOT ========================

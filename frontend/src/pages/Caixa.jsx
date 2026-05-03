@@ -19,32 +19,54 @@ const statusLabel = { ai: "IA", human: "Humano", closed: "Fechada", open: "Abert
 
 const Caixa = () => {
   const [convos, setConvos] = useState([]);
+  const [agents, setAgents] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [thread, setThread] = useState(null);
   const [channelFilter, setChannelFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [agentFilter, setAgentFilter] = useState("all");
   const [input, setInput] = useState("");
   const [simText, setSimText] = useState("");
   const [simName, setSimName] = useState("Visitante Teste");
   const [simChannel, setSimChannel] = useState("webchat");
   const [sending, setSending] = useState(false);
   const endRef = useRef(null);
+  const msgsContainerRef = useRef(null);
   const wsRef = useRef(null);
+  const wasAtBottomRef = useRef(true);
 
   const loadConvos = async () => {
-    const { data } = await api.get("/conversations", { params: { channel: channelFilter, status: statusFilter } });
+    const { data } = await api.get("/conversations", {
+      params: { channel: channelFilter, status: statusFilter, agent_id: agentFilter },
+    });
     setConvos(data);
     if (!selectedId && data.length > 0) setSelectedId(data[0].id);
   };
-  const loadThread = async (id) => {
+  const loadAgents = async () => setAgents((await api.get("/agents")).data);
+  const loadThread = async (id, { autoScroll = false } = {}) => {
     if (!id) return;
+    // Remember scroll position BEFORE re-rendering
+    const el = msgsContainerRef.current;
+    if (el) {
+      const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+      wasAtBottomRef.current = dist < 80;
+    }
     const { data } = await api.get(`/conversations/${id}`);
     setThread(data);
-    setTimeout(() => endRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
+    // Scroll only if we were already at bottom OR explicitly asked (e.g. after sending)
+    requestAnimationFrame(() => {
+      if (autoScroll || wasAtBottomRef.current) {
+        endRef.current?.scrollIntoView({ behavior: autoScroll ? "smooth" : "auto" });
+      }
+    });
   };
 
-  useEffect(() => { loadConvos(); /* eslint-disable-next-line */ }, [channelFilter, statusFilter]);
-  useEffect(() => { loadThread(selectedId); /* eslint-disable-next-line */ }, [selectedId]);
+  useEffect(() => { loadAgents(); }, []);
+  useEffect(() => { loadConvos(); /* eslint-disable-next-line */ }, [channelFilter, statusFilter, agentFilter]);
+  useEffect(() => {
+    if (selectedId) loadThread(selectedId, { autoScroll: true });
+    /* eslint-disable-next-line */
+  }, [selectedId]);
 
   // WebSocket live updates
   useEffect(() => {
@@ -54,7 +76,6 @@ const Caixa = () => {
     const wsUrl = API.replace(/^http/, "ws") + `/ws/${tenantId}`;
     let ws;
     let cancelled = false;
-    // small delay to avoid StrictMode double-mount tearing down an open socket
     const t = setTimeout(() => {
       if (cancelled) return;
       ws = new WebSocket(wsUrl);
@@ -83,7 +104,8 @@ const Caixa = () => {
     try {
       await api.post(`/conversations/${selectedId}/messages`, { text: input });
       setInput("");
-      await loadThread(selectedId); loadConvos();
+      await loadThread(selectedId, { autoScroll: true });
+      loadConvos();
     } catch { toast.error("Falha ao enviar"); }
     finally { setSending(false); }
   };
@@ -136,6 +158,15 @@ const Caixa = () => {
                 }`}>{l}</button>
             ))}
           </div>
+          {agents.length > 1 && (
+            <div className="mt-2">
+              <select data-testid="filter-agent" value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)}
+                className="w-full text-[12px] px-2 py-1.5 border border-[#E5EAF2] rounded-lg bg-white">
+                <option value="all">Todos os agentes</option>
+                {agents.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
+              </select>
+            </div>
+          )}
         </div>
         <div className="flex-1 overflow-y-auto">
           {convos.map(c => {
@@ -162,6 +193,16 @@ const Caixa = () => {
                 {c.tags?.length > 0 && (
                   <div className="mt-2 flex gap-1 flex-wrap">
                     {c.tags.slice(0, 3).map(t => <span key={t} className="badge badge-ghost">{t}</span>)}
+                  </div>
+                )}
+                {c.action_counts && (c.action_counts.leads > 0 || c.action_counts.tickets > 0) && (
+                  <div className="mt-2 flex gap-1.5 flex-wrap">
+                    {c.action_counts.leads > 0 && (
+                      <span className="badge badge-green">⚡ {c.action_counts.leads} lead{c.action_counts.leads > 1 ? "s" : ""}</span>
+                    )}
+                    {c.action_counts.tickets > 0 && (
+                      <span className="badge badge-amber">🎫 {c.action_counts.tickets} ticket{c.action_counts.tickets > 1 ? "s" : ""}</span>
+                    )}
                   </div>
                 )}
               </button>
@@ -212,7 +253,7 @@ const Caixa = () => {
               </div>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-4" data-testid="thread-messages">
+            <div className="flex-1 overflow-y-auto p-6 space-y-4" ref={msgsContainerRef} data-testid="thread-messages">
               {messages.map(m => {
                 const isUser = m.sender === "user";
                 return (
