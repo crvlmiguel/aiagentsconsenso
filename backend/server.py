@@ -55,12 +55,13 @@ def _detect(text: str, default: str = "pt") -> str:
 
 
 async def _notify_new_lead(tenant_id: str, lead_id: str, agent: dict) -> None:
-    """Send an email notification if the tenant has an SMTP integration configured."""
-    smtp = await db.integrations.find_one({"tenant_id": tenant_id, "kind": "smtp", "status": "connected"}, {"_id": 0})
-    if not smtp:
+    """Send an email notification using the AGENT's own SMTP config (agent-centric)."""
+    email_cfg = (agent or {}).get("email") or {}
+    if not email_cfg.get("enabled"):
         return
-    cfg = smtp.get("config") or {}
-    to = agent.get("notify_email") or cfg.get("notify_email") or cfg.get("from_email")
+    if not email_cfg.get("host") or not email_cfg.get("from_email"):
+        return
+    to = email_cfg.get("notify_email") or agent.get("notify_email") or email_cfg.get("from_email")
     if not to:
         return
     lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
@@ -68,7 +69,7 @@ async def _notify_new_lead(tenant_id: str, lead_id: str, agent: dict) -> None:
         return
     html = render_lead_email(lead)
     subject = f"Novo lead · {lead.get('name', '')}"
-    result = send_email(cfg, to, subject, html)
+    result = send_email(email_cfg, to, subject, html)
     logger.info(f"Lead email notify {lead_id} → {to}: {result}")
     await db.leads.update_one({"id": lead_id}, {"$set": {"email_notified": bool(result.get("ok"))}})
 
@@ -110,14 +111,15 @@ async def register(inp: RegisterInput):
             {"key": "webhook", "enabled": False},
         ],
         "knowledge": "", "data_source_ids": [], "default_language": "pt",
+        "notify_email": "",
+        "channels": {
+            "webchat": {"enabled": True},
+            "whatsapp": {"enabled": False, "access_token": "", "phone_number_id": ""},
+            "telegram": {"enabled": False, "bot_token": ""},
+        },
+        "email": {"enabled": False, "host": "", "port": 587, "secure": "tls",
+                  "username": "", "password": "", "from_email": "", "notify_email": ""},
         "active": True, "created_at": now_iso(),
-    })
-
-    await db.integrations.insert_one({
-        "id": new_id(), "tenant_id": tenant_id,
-        "kind": "webchat", "category": "channel",
-        "name": "Web Chat", "status": "connected",
-        "config": {}, "created_at": now_iso(),
     })
 
     token = create_token(user_id, tenant_id, "owner")
@@ -259,6 +261,87 @@ async def test_agent(agent_id: str, inp: SendMessageInput, claims=Depends(curren
     return {"intent": intent, "structure": structure, "decision": decision,
             "retrieved": [{"kind": d["kind"], "meta": d.get("meta", {}), "text": d["text"][:200]} for d in retrieved],
             "language": lang, **reply}
+
+
+@api.post("/agents/{agent_id}/test-email")
+async def agent_test_email(agent_id: str, body: dict, claims=Depends(current_user)):
+    """Send a test email using the agent's SMTP config."""
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    cfg = agent.get("email") or {}
+    if not cfg.get("host") or not cfg.get("from_email"):
+        return {"ok": False, "error": "Configuração SMTP incompleta. Preencha servidor e email remetente."}
+    to = (body or {}).get("to") or cfg.get("notify_email") or cfg.get("from_email")
+    if not to:
+        return {"ok": False, "error": "Indique um destinatário"}
+    html = f"<p>Olá! Este é um email de teste do agente <b>{agent.get('name','')}</b> no Consenso+.</p>"
+    return send_email(cfg, to, f"Consenso+ · Teste · {agent.get('name','')}", html)
+
+
+@api.post("/agents/{agent_id}/test-channel/{channel}")
+async def agent_test_channel(agent_id: str, channel: str, claims=Depends(current_user)):
+    """Validate a channel configuration by calling its provider API."""
+    import httpx
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    ch = (agent.get("channels") or {}).get(channel) or {}
+    if not ch.get("enabled"):
+        return {"ok": False, "error": "Canal desativado. Ative primeiro."}
+
+    try:
+        if channel == "webchat":
+            return {"ok": True, "info": "Widget do agente pronto para instalação."}
+
+        if channel == "telegram":
+            token = (ch.get("bot_token") or "").strip()
+            if not token:
+                return {"ok": False, "error": "Bot Token em falta"}
+            async with httpx.AsyncClient(timeout=10) as hc:
+                r = await hc.get(f"https://api.telegram.org/bot{token}/getMe")
+            if r.status_code != 200:
+                return {"ok": False, "error": f"Telegram rejeitou o token (HTTP {r.status_code})"}
+            j = r.json()
+            if not j.get("ok"):
+                return {"ok": False, "error": j.get("description") or "Token inválido"}
+            info = j.get("result", {})
+            return {"ok": True, "info": f"@{info.get('username','?')} · {info.get('first_name','')}"}
+
+        if channel == "whatsapp":
+            tok = (ch.get("access_token") or "").strip()
+            pid = (ch.get("phone_number_id") or "").strip()
+            if not tok or not pid:
+                return {"ok": False, "error": "Access Token e Phone Number ID obrigatórios"}
+            async with httpx.AsyncClient(timeout=10) as hc:
+                r = await hc.get(
+                    f"https://graph.facebook.com/v20.0/{pid}",
+                    params={"fields": "display_phone_number,verified_name"},
+                    headers={"Authorization": f"Bearer {tok}"},
+                )
+            if r.status_code != 200:
+                try:
+                    msg = r.json().get("error", {}).get("message", "Erro desconhecido")
+                except Exception:
+                    msg = f"HTTP {r.status_code}"
+                return {"ok": False, "error": f"WhatsApp: {msg}"}
+            j = r.json()
+            return {"ok": True, "info": f"{j.get('verified_name','')} · {j.get('display_phone_number','')}"}
+
+        if channel == "instagram":
+            tok = (ch.get("access_token") or "").strip()
+            if not tok:
+                return {"ok": False, "error": "Access Token obrigatório"}
+            async with httpx.AsyncClient(timeout=10) as hc:
+                r = await hc.get("https://graph.facebook.com/v20.0/me",
+                                 headers={"Authorization": f"Bearer {tok}"})
+            if r.status_code != 200:
+                return {"ok": False, "error": f"Instagram rejeitou o token (HTTP {r.status_code})"}
+            return {"ok": True, "info": "Instagram token válido"}
+
+        return {"ok": False, "error": f"Canal não suportado: {channel}"}
+    except Exception as e:
+        return {"ok": False, "error": f"Erro de ligação: {str(e)[:200]}"}
 
 
 # ======================== DATA SOURCES ========================
@@ -504,7 +587,7 @@ async def add_tag(conv_id: str, body: dict, claims=Depends(current_user)):
 
 
 # ======================== INBOUND PIPELINE ========================
-async def _process_inbound(tenant_id: str, inbound: InboundMessage) -> dict:
+async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Optional[str] = None) -> dict:
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
     default_lang = (tenant or {}).get("default_language", "pt")
 
@@ -544,7 +627,11 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage) -> dict:
         )
         return {"conversation_id": conv_id, "reply": None, "cards": [], "handoff": True}
 
-    agent = await db.agents.find_one({"tenant_id": tenant_id, "active": True}, {"_id": 0})
+    agent = None
+    if agent_id:
+        agent = await db.agents.find_one({"tenant_id": tenant_id, "id": agent_id, "active": True}, {"_id": 0})
+    if not agent:
+        agent = await db.agents.find_one({"tenant_id": tenant_id, "active": True}, {"_id": 0})
     if not agent:
         # No active agent — respond with a clear PT message
         ai_msg = {
@@ -647,12 +734,12 @@ async def webchat_inbound(tenant_id: str, inbound: InboundMessage):
     if not tenant:
         raise HTTPException(404, "Tenant não encontrado")
     inbound.channel = "webchat"
-    return await _process_inbound(tenant_id, inbound)
+    return await _process_inbound(tenant_id, inbound, agent_id=inbound.agent_id)
 
 
 @api.post("/inbound/simulate")
 async def simulate_inbound(inbound: InboundMessage, claims=Depends(current_user)):
-    return await _process_inbound(claims["tenant_id"], inbound)
+    return await _process_inbound(claims["tenant_id"], inbound, agent_id=inbound.agent_id)
 
 
 # ======================== LEADS ========================

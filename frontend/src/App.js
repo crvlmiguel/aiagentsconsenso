@@ -14,7 +14,6 @@ import Agentes from "./pages/Agentes";
 import Fontes from "./pages/Fontes";
 import Leads from "./pages/Leads";
 import Tickets from "./pages/Tickets";
-import Canais from "./pages/Canais";
 import Equipa from "./pages/Equipa";
 import Admin from "./pages/Admin";
 import Definicoes from "./pages/Definicoes";
@@ -51,7 +50,7 @@ function App() {
             <Route path="fontes" element={<Fontes />} />
             <Route path="leads" element={<Leads />} />
             <Route path="tickets" element={<Tickets />} />
-            <Route path="canais" element={<Canais />} />
+            <Route path="canais" element={<Navigate to="/app/agentes" replace />} />
             <Route path="equipa" element={<Equipa />} />
             <Route path="admin" element={<Admin />} />
             <Route path="definicoes" element={<Definicoes />} />

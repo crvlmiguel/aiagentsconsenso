@@ -1,0 +1,26 @@
+{
+  "summary": "Agent-centric restructure v2.3 verified. Backend: 10/10 pytest pass (demo login, agent channels/email persistence via PUT, /test-channel/webchat ok:true, /test-channel/telegram|whatsapp invalid returns ok:false with PT error, /test-email incomplete SMTP returns ok:false, /webchat/{tenant}/message accepts agent_id, new-tenant registration creates NO global webchat integration and new agent has channels.webchat.enabled=true). Frontend: sidebar has NO nav-canais (all 10 required nav items present); /app/canais redirects to /app/agentes; Agentes editor shows 7 tabs (Identidade, IA, Canais, Email, Instalação, Fontes, Pré-visualizar); Canais tab shows exactly 3 channels (webchat, whatsapp, telegram) with NO instagram/messenger; WhatsApp/Telegram enable flow exposes API fields + Webhook URL copy button + Testar ligação; Email tab shows full SMTP form (host/port/secure/user/pass/from/notify) + Enviar teste; Instalação tab shows script with data-agent-id/data-tenant-id + WP shortcode [consenso_chat agent_id='<id>'] + live widget iframe; Pré-visualizar renders agent header, welcome message, icebreakers as pills, and icebreaker click produces AI reply (2 bubbles).",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_agent_centric.py",
+    "/app/test_reports/pytest/agent_centric.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py at ~1016 lines — well over 700 LoC threshold. Recommend splitting into routers/{auth,agents,data_sources,conversations,integrations,leads,tickets,team,admin,widget,webchat}.py. Carry-over from iteration_3.",
+    "agent_test_channel still contains dead code for 'instagram' branch even though UI intentionally dropped Instagram/Messenger. Harmless but inconsistent with the new 3-channel contract — consider removing to avoid future drift.",
+    "Agentes.jsx is ~790 lines (7-tab editor, preview chat, install renderer, etc.). Consider extracting each tab into its own component under /pages/agentes/tabs/ for maintainability.",
+    "sendPreview has a formatting bug on line 149: 'if (!overrideText) setChatInput(\"\"); setChatBusy(true);' — the setChatBusy is unconditional but visually reads like it's in the if-branch (no braces). Works correctly, but confusing. Add braces.",
+    "Legacy /api/integrations endpoints (PUT + test-email) and the whole Integration model are still live even though the UI no longer creates/uses global channels — either remove or clearly document as 'legacy admin-only' to prevent tenants hitting it.",
+    "widget.html is served from disk now (good), but /widget/{tenant_id} is NOT behind /api — relies on the kubernetes ingress letting that path through. Defensible since /api/widget/{tenant_id} alias also exists, but document which one clients should use."
+  ],
+  "updated_files": ["/app/backend/tests/test_agent_centric.py"],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% of requested flows verified"},
+  "test_credentials": "demo@consenso.plus / demo1234",
+  "seed_data_creation": "None. Test uses existing Aria agent + creates a throwaway TestCo tenant via /auth/register to verify no global webchat integration is seeded (cleanup not strictly needed as it uses random slug).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Three pytest files exist now: backend_test.py (v2.0 baseline), test_v2_config.py (v2.x), test_agent_centric.py (v2.3 agent-centric — this run). Run all: cd /app/backend && python -m pytest tests/ -v. Login CTA text is 'Entrar' (not button[type=submit] selector). Key data-testids verified: nav-{caixa,painel,construtor,agentes,fontes,leads,tickets,equipa,admin,definicoes}, agent-tabs, tab-{identity,ai,channels,email,install,data,preview}, channel-{webchat,whatsapp,telegram}, channel-toggle-{kind}, channel-whatsapp-{access_token,phone_number_id}, channel-telegram-bot_token, btn-copy-webhook-{whatsapp,telegram}, btn-test-{whatsapp,telegram}, email-{enabled,host,port,secure,username,password,from,notify,test-to}, btn-test-email, btn-copy-{script,shortcode}, widget-preview, preview-{panel,input}, btn-send-preview, preview-ice-{i}. Instagram/Messenger were intentionally removed — do not test for them.",
+  "rca of the issue": "No new bugs. Restructure from global channels/email to per-agent config is working end-to-end. Backend /agents/{id}/test-channel/{channel} properly validates: webchat → always ok; telegram → calls https://api.telegram.org/bot{token}/getMe and returns ok:false if token invalid; whatsapp → calls Graph API and returns ok:false if token/phone_id invalid. /agents/{id}/test-email returns ok:false with PT message 'Configuração SMTP incompleta...' when host/from_email empty. New tenant registration no longer inserts a global webchat Integration row; instead the new default agent has channels.webchat.enabled=true."
+}

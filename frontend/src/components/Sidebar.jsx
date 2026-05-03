@@ -1,7 +1,7 @@
 import React from "react";
 import { NavLink, useNavigate } from "react-router-dom";
 import {
-  Inbox, Bot, Users, LifeBuoy, Plug, BarChart3, UserPlus,
+  Inbox, Bot, Users, LifeBuoy, BarChart3, UserPlus,
   Settings as SettingsIcon, Shield, LogOut, Database, Wand2,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -15,7 +15,6 @@ const items = [
   { section: "agents", to: "/app/construtor", label: "Construtor", icon: Wand2, tid: "nav-construtor", badge: "NOVO" },
   { section: "agents", to: "/app/agentes", label: "Agentes IA", icon: Bot, tid: "nav-agentes" },
   { section: "agents", to: "/app/fontes", label: "Fontes de dados", icon: Database, tid: "nav-fontes" },
-  { section: "agents", to: "/app/canais", label: "Canais & Email", icon: Plug, tid: "nav-canais" },
 
   { section: "crm", heading: "CRM" },
   { section: "crm", to: "/app/leads", label: "Leads", icon: Users, tid: "nav-leads" },

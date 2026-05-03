@@ -163,7 +163,7 @@ async function send(text) {
     const r = await fetch(API + "/webchat/" + TENANT + "/message", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channel: "webchat", external_user_id: UID, contact_name: NAME_V, text: text }),
+      body: JSON.stringify({ channel: "webchat", external_user_id: UID, contact_name: NAME_V, text: text, agent_id: AGENT_ID || null }),
     });
     const j = await r.json();
     typing.remove();

@@ -80,6 +80,7 @@ class Agent(BaseModel):
     default_language: str = "pt"
     notify_email: str = ""
     channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    email: Dict[str, Any] = Field(default_factory=dict)
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
@@ -103,6 +104,7 @@ class AgentInput(BaseModel):
     default_language: str = "pt"
     notify_email: str = ""
     channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
+    email: Dict[str, Any] = Field(default_factory=dict)
     active: bool = True
 
 
@@ -186,6 +188,7 @@ class InboundMessage(BaseModel):
     contact_name: str = "Visitante Web"
     text: str
     tenant_id: Optional[str] = None
+    agent_id: Optional[str] = None
 
 
 class SendMessageInput(BaseModel):
