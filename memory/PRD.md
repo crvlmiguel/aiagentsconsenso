@@ -1,7 +1,29 @@
-# Consenso Plus — PRD (v3.2)
+# Consenso Plus — PRD (v3.3)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+
+## v3.3 (2026-05-03) — Webhooks reais + lazy-load Inbox
+
+### Webhooks inbound (P0)
+- **Telegram**: `POST /api/webhooks/telegram/{tenant_id}/{agent_id}` — recebe updates, processa via IA com o agente específico, envia resposta via Telegram Bot API usando `bot_token` do próprio agente
+- **WhatsApp Cloud**: `GET` para Meta verification (`hub.mode/verify_token/challenge`) + `POST` para receber mensagens; resposta via Graph API v20.0 usando `access_token` + `phone_number_id` do agente
+- Novo campo `verify_token` em `channels.whatsapp` (por agente) — configurável na UI (`data-testid="channel-whatsapp-verify_token"`)
+- Novo módulo dedicado `/app/backend/webhooks.py` (precursor do refactor completo do server.py)
+- URLs visíveis na UI por agente no separador Canais
+
+### Lazy-load de mensagens (P0)
+- Backend: `GET /api/conversations/{id}?limit=100&before=<iso>` paginado, com `total` e `has_more`
+- Frontend `Caixa.jsx`: carrega últimas 100 mensagens; botão "↑ Carregar anteriores" (`btn-load-more`) no topo; **scroll anchor preservado com precisão absoluta** (`diff=0px`) ao carregar mais
+
+### Verificação (iteration_7 — 10/10 backend + UI validada)
+- [x] Telegram webhook: 200 com canal ativo, 400 se desativado, 404 se agente inexistente
+- [x] WhatsApp verify: 200 com challenge correto, 403 com token errado
+- [x] WhatsApp inbound: payload Meta (entry→changes→value→messages) corretamente extraído
+- [x] Conversa aparece em `GET /api/conversations?channel={telegram|whatsapp}` após webhook
+- [x] Paginação: página 1 + página 2 (before) + última página com `has_more=false`
+- [x] UI: botão "Carregar anteriores" + scroll anchor preservado (diff=0px verificado)
+- [x] UI: campo verify_token visível e funcional no WhatsApp
 
 ## v3.2 (2026-05-03) — FIX crítico da Inbox (scroll)
 
@@ -80,8 +102,7 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 - Email: `demo@consenso.plus` / Senha: `demo1234` (ver `/app/memory/test_credentials.md`)
 
 ## Backlog P0
-- Webhook real Telegram/WhatsApp inbound (endpoints `/api/webhooks/{telegram,whatsapp}/{tenant_id}/{agent_id}`) — UI já mostra as URLs
-- Reconexão automática WebSocket no widget
+- Reconexão automática WebSocket no widget (atualmente sem retry no widget.html)
 
 ## Backlog P1
 - Upload de avatar (object storage) em vez de URL manual

@@ -29,6 +29,7 @@ from ai.retrieval import scrape_url, build_chunks, retrieve
 from ai.router import test_connection as llm_test_connection, LLMConfigMissing, LLMProviderError
 from email_service import send_email, render_lead_email
 from ws_manager import manager as ws_manager
+from webhooks import build_router as build_webhooks_router
 
 from langdetect import detect as detect_lang, DetectorFactory
 DetectorFactory.seed = 0
@@ -501,13 +502,23 @@ async def list_conversations(
 
 
 @api.get("/conversations/{conv_id}")
-async def get_conversation(conv_id: str, claims=Depends(current_user)):
+async def get_conversation(conv_id: str, claims=Depends(current_user),
+                            limit: int = 100, before: Optional[str] = None):
     convo = await db.conversations.find_one({"id": conv_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
     if not convo:
         raise HTTPException(404, "Não encontrada")
-    messages = await db.messages.find({"conversation_id": conv_id}, {"_id": 0}).sort("created_at", 1).to_list(500)
-    await db.conversations.update_one({"id": conv_id}, {"$set": {"unread": 0}})
-    return {"conversation": convo, "messages": messages}
+    # Paginate: fetch last `limit` messages older than `before` (ISO timestamp)
+    q = {"conversation_id": conv_id}
+    if before:
+        q["created_at"] = {"$lt": before}
+    total = await db.messages.count_documents({"conversation_id": conv_id})
+    messages_desc = await db.messages.find(q, {"_id": 0}).sort("created_at", -1).limit(max(1, min(500, limit))).to_list(500)
+    messages = list(reversed(messages_desc))
+    # has_more = we fetched a full page (so older ones likely exist)
+    has_more = len(messages_desc) >= limit and (total > len(messages) if not before else True)
+    if not before:
+        await db.conversations.update_one({"id": conv_id}, {"$set": {"unread": 0}})
+    return {"conversation": convo, "messages": messages, "total": total, "has_more": bool(has_more)}
 
 
 @api.post("/conversations/{conv_id}/takeover")
@@ -1038,6 +1049,7 @@ async def root():
 
 
 app.include_router(api)
+app.include_router(build_webhooks_router(db, _process_inbound))
 
 app.add_middleware(
     CORSMiddleware,

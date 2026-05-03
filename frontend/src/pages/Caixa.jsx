@@ -18,6 +18,8 @@ const Caixa = () => {
   const [selectedId, setSelectedId] = useState(null);
   const [conversation, setConversation] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [hasMore, setHasMore] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [loadingThread, setLoadingThread] = useState(false);
   const [threadError, setThreadError] = useState(null);
   const [channelFilter, setChannelFilter] = useState("all");
@@ -75,9 +77,10 @@ const Caixa = () => {
     if (!id) return;
     setLoadingThread(true); setThreadError(null);
     try {
-      const { data } = await api.get(`/conversations/${id}`);
+      const { data } = await api.get(`/conversations/${id}`, { params: { limit: 100 } });
       setConversation(data.conversation);
       setMessages(data.messages);
+      setHasMore(!!data.has_more);
       pendingScrollRef.current = "bottom";
     } catch (e) {
       setThreadError(e?.response?.data?.detail || "Falha a carregar");
@@ -85,6 +88,33 @@ const Caixa = () => {
       setLoadingThread(false);
     }
   }, []);
+
+  const loadMore = useCallback(async () => {
+    if (!selectedIdRef.current || !messages.length || loadingMore) return;
+    const el = msgsContainerRef.current;
+    const prevScrollHeight = el?.scrollHeight || 0;
+    const prevScrollTop = el?.scrollTop || 0;
+    setLoadingMore(true);
+    try {
+      const oldest = messages[0];
+      const { data } = await api.get(`/conversations/${selectedIdRef.current}`, {
+        params: { limit: 100, before: oldest.created_at },
+      });
+      setMessages(prev => {
+        const seen = new Set(prev.map(m => m.id));
+        const newer = data.messages.filter(m => !seen.has(m.id));
+        return [...newer, ...prev];
+      });
+      setHasMore(!!data.has_more);
+      // Preserve scroll position (keep user's visual anchor)
+      requestAnimationFrame(() => {
+        if (!el) return;
+        const delta = el.scrollHeight - prevScrollHeight;
+        el.scrollTop = prevScrollTop + delta;
+      });
+    } catch { /* silent */ }
+    finally { setLoadingMore(false); }
+  }, [messages, loadingMore]);
 
   // ===== Mount effects =====
   useEffect(() => { loadAgents(); }, [loadAgents]);
@@ -296,7 +326,7 @@ const Caixa = () => {
                   {conversation.language && <span className="badge badge-ghost">{conversation.language.toUpperCase()}</span>}
                 </div>
                 <div className="text-xs text-[#5B6B82] mt-0.5 uppercase tracking-wider font-semibold">
-                  {conversation.channel} · {new Date(conversation.created_at).toLocaleDateString("pt-PT")} · {messages.length} mensagens
+                  {conversation.channel} · {new Date(conversation.created_at).toLocaleDateString("pt-PT")} · {messages.length} {hasMore ? "/ + anteriores" : ""} mensagens
                 </div>
               </div>
               <div className="flex gap-2">
@@ -326,6 +356,14 @@ const Caixa = () => {
                 <div className="p-4 bg-[#FEE2E2] border border-[#FCA5A5] rounded-xl text-sm text-[#991B1B] flex items-center justify-between">
                   <span>{threadError}</span>
                   <button onClick={() => loadThread(selectedId)} className="font-semibold underline">Tentar novamente</button>
+                </div>
+              )}
+              {hasMore && !loadingThread && (
+                <div className="flex justify-center">
+                  <button data-testid="btn-load-more" onClick={loadMore} disabled={loadingMore}
+                    className="text-xs font-semibold px-3 py-1.5 rounded-full border border-[#E5EAF2] bg-white hover:bg-[#F7F9FC] text-[#0069FE]">
+                    {loadingMore ? "A carregar…" : "↑ Carregar anteriores"}
+                  </button>
                 </div>
               )}
               {loadingThread && messages.length === 0 && (

@@ -441,6 +441,7 @@ const Agentes = () => {
                   { k: "whatsapp", label: "WhatsApp", Icon: Phone, fields: [
                     { f: "access_token", l: "API Token (WhatsApp Cloud)", type: "password", ph: "EAA..." },
                     { f: "phone_number_id", l: "Phone Number ID", type: "text", ph: "123456789012345" },
+                    { f: "verify_token", l: "Verify Token (webhook)", type: "text", ph: "escolha-um-segredo" },
                   ]},
                   { k: "telegram", label: "Telegram", Icon: Send, fields: [
                     { f: "bot_token", l: "Bot Token", type: "password", ph: "1234:ABC-DEF_abc..." },
