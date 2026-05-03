@@ -34,22 +34,21 @@ const Login = () => {
         <div className="relative">
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full text-xs font-medium">
             <span className="w-1.5 h-1.5 bg-[#7CFFA3] rounded-full live-dot" />
-            Sistema Operativo de IA
+            Comunicação multilingue · Tecnologia linguística
           </div>
-          <h1 className="font-display text-5xl font-bold leading-[1.05] mt-8 max-w-md">
-            A plataforma de IA que opera o seu negócio.
+          <h1 className="font-display text-4xl lg:text-5xl font-bold leading-[1.08] mt-8 max-w-md">
+            Especialistas em comunicação multilingue e tecnologia linguística.
           </h1>
-          <p className="text-white/75 mt-4 max-w-md leading-relaxed">
-            Crie agentes de IA ligados aos seus dados, implemente em qualquer canal,
-            automatize vendas e suporte.
+          <p className="text-white/85 mt-5 max-w-md leading-relaxed text-lg">
+            Agentes de IA multilingues que potenciam a comunicação global das empresas.
           </p>
         </div>
         <div className="relative grid grid-cols-2 gap-4 max-w-md">
           {[
-            { icon: Bot, t: "Agentes IA", d: "Crie e deploy em minutos" },
-            { icon: Database, t: "Fontes", d: "Websites, ficheiros, BD" },
-            { icon: Zap, t: "Multi-canal", d: "Web, WA, IG, Telegram" },
-            { icon: ShieldCheck, t: "Multi-tenant", d: "Isolamento total" },
+            { icon: Bot, t: "Agentes IA", d: "Multilingues, 24/7" },
+            { icon: Database, t: "Dados próprios", d: "Sites, ficheiros, BD" },
+            { icon: Zap, t: "Omni-canal", d: "Web, WA, IG, Telegram" },
+            { icon: ShieldCheck, t: "Enterprise", d: "Multi-tenant seguro" },
           ].map((f, i) => (
             <div key={i} className="bg-white/10 backdrop-blur rounded-xl p-3 border border-white/10">
               <f.icon size={18} />
@@ -64,7 +63,7 @@ const Login = () => {
         <form data-testid="login-form" onSubmit={onSubmit} className="w-full max-w-sm">
           <div className="md:hidden mb-8"><Logo size={28} /></div>
           <h2 className="font-display text-3xl font-bold text-[#0B1324]">Iniciar sessão</h2>
-          <p className="text-[#5B6B82] mt-1.5 text-sm">Aceda ao seu sistema operativo de IA.</p>
+          <p className="text-[#5B6B82] mt-1.5 text-sm">Aceda à sua plataforma de agentes IA multilingues.</p>
 
           <div className="mt-8 space-y-4">
             <div>
