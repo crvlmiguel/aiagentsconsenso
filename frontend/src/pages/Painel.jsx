@@ -47,14 +47,18 @@ const Painel = () => {
           <div className="font-display font-semibold">Conversas por canal</div>
           <p className="text-xs text-[#5B6B82] mt-0.5">Distribuição ao longo dos canais ligados.</p>
           <div className="mt-4" style={{ width: "100%", height: 260 }}>
-            <ResponsiveContainer>
-              <BarChart data={stats.by_channel}>
-                <XAxis dataKey="channel" stroke="#5B6B82" fontSize={12} />
-                <YAxis stroke="#5B6B82" fontSize={12} />
-                <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5EAF2", borderRadius: 10 }} />
-                <Bar dataKey="count" fill="#0069FE" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {stats.by_channel && stats.by_channel.length > 0 ? (
+              <ResponsiveContainer>
+                <BarChart data={stats.by_channel}>
+                  <XAxis dataKey="channel" stroke="#5B6B82" fontSize={12} />
+                  <YAxis stroke="#5B6B82" fontSize={12} />
+                  <Tooltip contentStyle={{ background: "#fff", border: "1px solid #E5EAF2", borderRadius: 10 }} />
+                  <Bar dataKey="count" fill="#0069FE" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="h-full flex items-center justify-center text-sm text-[#5B6B82]">Sem conversas ainda.</div>
+            )}
           </div>
         </div>
 

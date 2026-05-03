@@ -8,8 +8,8 @@ import { Bot, Zap, ShieldCheck, Database } from "lucide-react";
 const Login = () => {
   const { login } = useAuth();
   const nav = useNavigate();
-  const [email, setEmail] = useState("demo@consenso.plus");
-  const [password, setPassword] = useState("demo1234");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
   const onSubmit = async (e) => {
@@ -84,7 +84,6 @@ const Login = () => {
             <Link to="/registar" data-testid="link-register" className="hover:text-[#0069FE] font-medium">
               Criar nova conta
             </Link>
-            <span className="text-xs">Demo: demo / demo1234</span>
           </div>
         </form>
       </div>

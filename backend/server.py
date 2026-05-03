@@ -983,6 +983,18 @@ async def widget_js_api():
                              "Access-Control-Allow-Origin": "*"})
 
 
+@api.get("/brand-icon.png")
+async def brand_icon():
+    from fastapi.responses import Response
+    path = ROOT_DIR / "static" / "consenso-icon.png"
+    try:
+        return Response(content=path.read_bytes(), media_type="image/png",
+                        headers={"Cache-Control": "public, max-age=86400",
+                                 "Access-Control-Allow-Origin": "*"})
+    except Exception:
+        raise HTTPException(404)
+
+
 @api.get("/widget-test/{tenant_id}/{agent_id}", response_class=HTMLResponse)
 async def widget_test_page(tenant_id: str, agent_id: str, request: Request):
     """Demo page that loads widget.js as an external site would — for real-world testing."""
