@@ -63,6 +63,9 @@ class Agent(BaseModel):
     id: str = Field(default_factory=new_id)
     tenant_id: str
     name: str
+    avatar_url: str = ""
+    welcome_message: str = "Olá! Como posso ajudar?"
+    icebreakers: List[str] = Field(default_factory=list)
     tone: str = "profissional"
     goal: str = "Ajudar clientes"
     system_prompt: str = "És um assistente útil."
@@ -76,12 +79,16 @@ class Agent(BaseModel):
     data_source_ids: List[str] = Field(default_factory=list)
     default_language: str = "pt"
     notify_email: str = ""
+    channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
 
 class AgentInput(BaseModel):
     name: str
+    avatar_url: str = ""
+    welcome_message: str = "Olá! Como posso ajudar?"
+    icebreakers: List[str] = Field(default_factory=list)
     tone: str = "profissional"
     goal: str = "Ajudar clientes"
     system_prompt: str = "És um assistente útil."
@@ -95,6 +102,7 @@ class AgentInput(BaseModel):
     data_source_ids: List[str] = Field(default_factory=list)
     default_language: str = "pt"
     notify_email: str = ""
+    channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     active: bool = True
 
 

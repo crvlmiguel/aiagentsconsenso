@@ -8,7 +8,11 @@ import {
 } from "lucide-react";
 
 const defaultAgent = {
-  name: "Novo Agente", tone: "profissional", goal: "Ajudar clientes",
+  name: "Novo Agente",
+  avatar_url: "",
+  welcome_message: "Olá! Como posso ajudar?",
+  icebreakers: [],
+  tone: "profissional", goal: "Ajudar clientes",
   system_prompt: "És um assistente útil. Responde em Português Europeu.",
   rules: "", api_provider: "emergent", api_key: "",
   model_provider: "auto", model_name: "gpt-5.1",
@@ -17,7 +21,14 @@ const defaultAgent = {
     { key: "send_email", enabled: false }, { key: "webhook", enabled: false },
   ],
   knowledge: "", data_source_ids: [], default_language: "pt",
-  notify_email: "", active: true,
+  notify_email: "",
+  channels: {
+    webchat: { enabled: true },
+    whatsapp: { enabled: false, access_token: "", phone_number_id: "" },
+    instagram: { enabled: false, access_token: "", page_id: "" },
+    telegram: { enabled: false, bot_token: "" },
+  },
+  active: true,
 };
 
 const Agentes = () => {
@@ -94,6 +105,17 @@ const Agentes = () => {
   const openChat = () => { setChat([]); setShowChat(true); };
 
   const update = (k, v) => setSelected({ ...selected, [k]: v });
+  const updateChannel = (kind, k, v) => {
+    const channels = { ...(selected.channels || {}) };
+    channels[kind] = { ...(channels[kind] || {}), [k]: v };
+    update("channels", channels);
+  };
+  const addIce = () => update("icebreakers", [...(selected.icebreakers || []), ""]);
+  const updIce = (i, v) => {
+    const ices = [...(selected.icebreakers || [])];
+    ices[i] = v; update("icebreakers", ices);
+  };
+  const delIce = (i) => update("icebreakers", (selected.icebreakers || []).filter((_, j) => j !== i));
   const toggleTool = (key) => update("tools", selected.tools.map(t => t.key === key ? { ...t, enabled: !t.enabled } : t));
   const toggleSource = (id) => {
     const has = (selected.data_source_ids || []).includes(id);
@@ -211,6 +233,113 @@ const Agentes = () => {
                   </span>
                 )}
               </div>
+            </div>
+
+            {/* IDENTIDADE DO AGENTE */}
+            <div className="card-surface p-6" data-testid="identity-panel">
+              <div className="font-display font-semibold mb-1">Identidade do agente</div>
+              <p className="text-xs text-[#5B6B82] mb-4">Aparece no widget de chat com avatar, nome e mensagem de boas-vindas.</p>
+              <div className="flex gap-4 items-start">
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-20 h-20 rounded-full bg-[#EAF2FF] text-[#0069FE] font-bold text-2xl flex items-center justify-center overflow-hidden border-2 border-[#C7DDFF]">
+                    {selected.avatar_url ? (
+                      <img src={selected.avatar_url} alt={selected.name}
+                        onError={(e) => { e.target.style.display = "none"; }}
+                        className="w-full h-full object-cover" />
+                    ) : (
+                      <span>{(selected.name || "A").slice(0, 2).toUpperCase()}</span>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-[#5B6B82] uppercase tracking-wider">Pré-visualização</div>
+                </div>
+                <div className="flex-1 space-y-3">
+                  <div>
+                    <label className="label">URL da foto do agente</label>
+                    <input data-testid="agent-avatar" value={selected.avatar_url || ""}
+                      onChange={(e) => update("avatar_url", e.target.value)}
+                      placeholder="https://..." className="input-base" />
+                  </div>
+                  <div>
+                    <label className="label">Mensagem de boas-vindas</label>
+                    <input data-testid="agent-welcome" value={selected.welcome_message || ""}
+                      onChange={(e) => update("welcome_message", e.target.value)}
+                      placeholder="Olá! Como posso ajudar?" className="input-base" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="flex items-center justify-between">
+                  <label className="label">Icebreakers (perguntas sugeridas)</label>
+                  <button data-testid="btn-add-ice" onClick={addIce} type="button" className="btn-ghost text-[11px] py-1 px-2">+ Adicionar</button>
+                </div>
+                <div className="space-y-2">
+                  {(selected.icebreakers || []).map((q, i) => (
+                    <div key={i} className="flex gap-2" data-testid={`ice-${i}`}>
+                      <input value={q} onChange={(e) => updIce(i, e.target.value)}
+                        placeholder="Ex: Quais imóveis estão disponíveis?"
+                        className="input-base flex-1 text-sm" />
+                      <button type="button" onClick={() => delIce(i)} className="btn-ghost text-[#DC2626] px-3"><Trash2 size={12} /></button>
+                    </div>
+                  ))}
+                  {(selected.icebreakers || []).length === 0 && (
+                    <div className="text-xs text-[#5B6B82] italic">Nenhum icebreaker. Clique em "+ Adicionar".</div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* CANAIS DO AGENTE */}
+            <div className="card-surface p-6" data-testid="channels-panel">
+              <div className="font-display font-semibold mb-1">Canais do agente</div>
+              <p className="text-xs text-[#5B6B82] mb-4">Cada agente tem a sua própria configuração de canais — não partilhados.</p>
+
+              {[
+                { k: "webchat", label: "Web Chat", fields: [] },
+                { k: "whatsapp", label: "WhatsApp", fields: [
+                  { f: "access_token", l: "API Token", type: "password" },
+                  { f: "phone_number_id", l: "Phone Number ID", type: "text" },
+                ]},
+                { k: "instagram", label: "Instagram", fields: [
+                  { f: "access_token", l: "Access Token", type: "password" },
+                  { f: "page_id", l: "Page ID", type: "text" },
+                ]},
+                { k: "telegram", label: "Telegram", fields: [
+                  { f: "bot_token", l: "Bot Token", type: "password" },
+                ]},
+              ].map(ch => {
+                const cfg = (selected.channels && selected.channels[ch.k]) || {};
+                return (
+                  <div key={ch.k} data-testid={`channel-${ch.k}`} className="border border-[#E5EAF2] rounded-xl p-4 mb-3">
+                    <label className="flex items-center gap-3">
+                      <input type="checkbox" data-testid={`channel-toggle-${ch.k}`}
+                        checked={!!cfg.enabled} onChange={(e) => updateChannel(ch.k, "enabled", e.target.checked)}
+                        className="accent-[#0069FE]" />
+                      <span className="font-semibold">{ch.label}</span>
+                      <span className={`badge ${cfg.enabled ? "badge-green" : "badge-ghost"}`}>
+                        {cfg.enabled ? "Ativo" : "Inativo"}
+                      </span>
+                    </label>
+                    {cfg.enabled && ch.fields.length > 0 && (
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        {ch.fields.map(f => (
+                          <div key={f.f}>
+                            <label className="label">{f.l}</label>
+                            <input data-testid={`channel-${ch.k}-${f.f}`} type={f.type} value={cfg[f.f] || ""}
+                              onChange={(e) => updateChannel(ch.k, f.f, e.target.value)}
+                              className="input-base" />
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {ch.k === "webchat" && cfg.enabled && (
+                      <div className="mt-3 text-xs text-[#5B6B82]">
+                        O widget usa a identidade definida acima.
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
 
             <div className="card-surface p-6">

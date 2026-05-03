@@ -783,6 +783,33 @@ async def list_all_tenants(claims=Depends(current_user)):
     return result
 
 
+# ======================== PUBLIC AGENT IDENTITY ========================
+@api.get("/public/agent/{tenant_id}")
+async def public_agent(tenant_id: str, agent_id: Optional[str] = None):
+    """Public endpoint used by the embed widget to fetch agent identity (no auth)."""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(404, "Tenant não encontrado")
+    query = {"tenant_id": tenant_id, "active": True}
+    if agent_id:
+        query["id"] = agent_id
+    agent = await db.agents.find_one(query, {"_id": 0, "api_key": 0, "rules": 0, "system_prompt": 0, "knowledge": 0})
+    if not agent:
+        return {
+            "tenant_name": tenant.get("name"),
+            "name": "Assistente", "avatar_url": "", "welcome_message": "Olá! Como posso ajudar?",
+            "icebreakers": [], "language": tenant.get("default_language", "pt"),
+        }
+    return {
+        "agent_id": agent["id"], "tenant_name": tenant.get("name"),
+        "name": agent.get("name", "Assistente"),
+        "avatar_url": agent.get("avatar_url", ""),
+        "welcome_message": agent.get("welcome_message") or "Olá! Como posso ajudar?",
+        "icebreakers": agent.get("icebreakers") or [],
+        "language": agent.get("default_language", "pt"),
+    }
+
+
 # ======================== WEBSOCKET ========================
 @app.websocket("/api/ws/{tenant_id}")
 async def ws_endpoint(websocket: WebSocket, tenant_id: str):
@@ -795,86 +822,30 @@ async def ws_endpoint(websocket: WebSocket, tenant_id: str):
 
 
 # ======================== EMBEDDABLE WIDGET ========================
-WIDGET_HTML = """<!doctype html>
-<html lang="pt"><head><meta charset="utf-8"><title>Consenso+ Chat</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<style>
-*{box-sizing:border-box}body,html{margin:0;padding:0;height:100%;font-family:Inter,system-ui,sans-serif;color:#0B1324;background:#F7F9FC}
-.wrap{display:flex;flex-direction:column;height:100%;max-width:420px;margin:0 auto;background:#fff;border:1px solid #E5EAF2}
-.hd{background:#0069FE;color:#fff;padding:14px 16px;font-weight:600}
-.hd small{display:block;opacity:.8;font-weight:400;font-size:12px}
-.msgs{flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:10px;background:#F7F9FC}
-.msg{max-width:82%;padding:10px 12px;border-radius:14px;font-size:14px;line-height:1.35;white-space:pre-wrap}
-.me{align-self:flex-end;background:#0069FE;color:#fff;border-bottom-right-radius:4px}
-.bot{align-self:flex-start;background:#fff;border:1px solid #E5EAF2;border-bottom-left-radius:4px}
-.card{border:1px solid #E5EAF2;border-radius:12px;overflow:hidden;background:#fff;margin-top:6px;display:flex;flex-direction:column}
-.card img{width:100%;height:120px;object-fit:cover;background:#EEF2F7}
-.card .b{padding:8px 10px}
-.card .t{font-weight:600;font-size:13px}
-.card .p{color:#0069FE;font-size:13px;font-weight:600;margin-top:2px}
-.card .d{font-size:12px;color:#5B6B82;margin-top:4px}
-.card a{display:block;padding:8px 10px;text-align:center;background:#0069FE;color:#fff;text-decoration:none;font-size:12px;font-weight:600}
-.inp{display:flex;gap:8px;padding:10px;border-top:1px solid #E5EAF2;background:#fff}
-.inp input{flex:1;padding:10px 12px;border:1px solid #E5EAF2;border-radius:10px;font:inherit;outline:none}
-.inp input:focus{border-color:#0069FE}
-.inp button{background:#0069FE;color:#fff;border:0;padding:0 14px;border-radius:10px;font-weight:600;cursor:pointer}
-.typing{font-size:12px;color:#5B6B82;padding:4px 6px}
-</style></head><body>
-<div class="wrap">
-  <div class="hd" id="hd">Assistente<small id="sub">A ligar…</small></div>
-  <div class="msgs" id="msgs"></div>
-  <form class="inp" id="f"><input id="t" placeholder="Escreva a sua mensagem..." required><button>Enviar</button></form>
-</div>
-<script>
-const params = new URLSearchParams(location.search);
-const API = params.get("api") || (location.origin + "/api");
-const TENANT = params.get("tenant");
-const NAME = params.get("name") || "Visitante";
-const UID = "w-" + Math.random().toString(36).slice(2,10);
-const msgs=document.getElementById("msgs"), f=document.getElementById("f"), t=document.getElementById("t"), sub=document.getElementById("sub");
-sub.textContent = "Online";
-function add(role, text, cards){
-  const d=document.createElement("div"); d.className="msg "+(role==="me"?"me":"bot"); d.textContent=text; msgs.appendChild(d);
-  (cards||[]).forEach(c=>{
-    const card=document.createElement("div"); card.className="card";
-    card.innerHTML=(c.image?`<img src="${c.image}" onerror="this.style.display='none'">`:"")+
-      `<div class="b"><div class="t">${c.title||""}</div>`+
-      (c.price?`<div class="p">${c.price}</div>`:"")+
-      (c.description?`<div class="d">${c.description}</div>`:"")+
-      `</div>`+(c.link?`<a href="${c.link}" target="_blank">Ver mais →</a>`:"");
-    msgs.appendChild(card);
-  });
-  msgs.scrollTop=msgs.scrollHeight;
-}
-add("bot","Olá! Como posso ajudar?",[]);
-f.addEventListener("submit", async e=>{
-  e.preventDefault();
-  const text=t.value.trim(); if(!text) return;
-  add("me",text,[]); t.value=""; const typing=document.createElement("div"); typing.className="typing"; typing.textContent="A escrever…"; msgs.appendChild(typing); msgs.scrollTop=msgs.scrollHeight;
-  try{
-    const r = await fetch(`${API}/webchat/${TENANT}/message`, {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({channel:"webchat", external_user_id:UID, contact_name:NAME, text})});
-    const j = await r.json();
-    typing.remove();
-    add("bot", j.reply || "…", j.cards||[]);
-  }catch(err){ typing.remove(); add("bot","Erro de ligação.",[]); }
-});
-</script></body></html>"""
+_WIDGET_PATH = ROOT_DIR / "widget.html"
+
+
+def _load_widget() -> str:
+    try:
+        return _WIDGET_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return "<html><body>Widget not found</body></html>"
 
 
 @app.get("/widget/{tenant_id}", response_class=HTMLResponse)
 async def widget(tenant_id: str):
-    return HTMLResponse(WIDGET_HTML)
+    return HTMLResponse(_load_widget())
 
 
 @api.get("/widget/{tenant_id}", response_class=HTMLResponse)
 async def widget_api(tenant_id: str):
-    return HTMLResponse(WIDGET_HTML)
+    return HTMLResponse(_load_widget())
 
 
 # ======================== ROOT ========================
 @api.get("/")
 async def root():
-    return {"name": "Consenso Plus", "version": "2.0.0", "status": "ok"}
+    return {"name": "Consenso Plus", "version": "2.3.0", "status": "ok"}
 
 
 app.include_router(api)
