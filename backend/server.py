@@ -260,7 +260,7 @@ async def test_agent(agent_id: str, inp: SendMessageInput, claims=Depends(curren
     except LLMProviderError as e:
         raise HTTPException(502, str(e))
     return {"intent": intent, "structure": structure, "decision": decision,
-            "retrieved": [{"kind": d["kind"], "meta": d.get("meta", {}), "text": d["text"][:200]} for d in retrieved],
+            "retrieved": [{"kind": d.get("kind", "item"), "meta": d.get("meta", {}), "text": d["text"][:200]} for d in retrieved],
             "language": lang, **reply}
 
 
