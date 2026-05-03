@@ -34,14 +34,11 @@ const Login = () => {
         <div className="relative">
           <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur px-3 py-1.5 rounded-full text-xs font-medium">
             <span className="w-1.5 h-1.5 bg-[#7CFFA3] rounded-full live-dot" />
-            Comunicação multilingue · Tecnologia linguística
+            Consenso+
           </div>
           <h1 className="font-display text-4xl lg:text-5xl font-bold leading-[1.08] mt-8 max-w-md">
-            Especialistas em comunicação multilingue e tecnologia linguística.
-          </h1>
-          <p className="text-white/85 mt-5 max-w-md leading-relaxed text-lg">
             Agentes de IA multilingues que potenciam a comunicação global das empresas.
-          </p>
+          </h1>
         </div>
         <div className="relative grid grid-cols-2 gap-4 max-w-md">
           {[
