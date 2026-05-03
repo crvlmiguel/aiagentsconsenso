@@ -1,0 +1,80 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 4 (Swiss & High-Contrast / Engineered Brutalist)",
+  "colors": {
+    "background": "#09090B",
+    "surface": "#18181B",
+    "surface_hover": "#27272A",
+    "border": "#27272A",
+    "border_focus": "#FAFAFA",
+    "text_primary": "#FAFAFA",
+    "text_secondary": "#A1A1AA",
+    "accent_primary": "#FFFFFF",
+    "accent_primary_text": "#000000",
+    "accent_ai": "#FF5500",
+    "accent_success": "#22C55E",
+    "accent_warning": "#EAB308",
+    "accent_danger": "#EF4444"
+  },
+  "typography": {
+    "font_family_headings": "Chivo",
+    "font_family_body": "Chivo",
+    "font_family_mono": "JetBrains Mono",
+    "rules": [
+      "No generic sans fonts (Inter, Roboto). Use Chivo for all UI copy.",
+      "Use JetBrains Mono for all numbers, metrics, tags, statuses, tooltips, timestamps, and small labels.",
+      "Headings should be uppercase and tightly tracked (tracking-tighter) for the technical OS feel."
+    ],
+    "hierarchy": {
+      "h1": "text-3xl sm:text-4xl font-bold tracking-tight uppercase",
+      "h2": "text-xl sm:text-2xl font-bold tracking-tight uppercase",
+      "h3": "text-lg font-semibold tracking-tight uppercase",
+      "body": "text-sm leading-relaxed",
+      "small_mono": "text-xs font-mono uppercase tracking-[0.1em]"
+    }
+  },
+  "spacing_and_layout": {
+    "philosophy": "High-density Control Room. Information heavy, utilizing all screen real estate. The Grid Borders look.",
+    "border_radius": "rounded-none",
+    "borders": "1px solid #27272A. Grid borders visible everywhere. Expose the skeleton.",
+    "panels": {
+      "sidebar": "w-64 border-r border-zinc-800 flex flex-col h-screen bg-[#09090B]",
+      "unified_inbox": "grid grid-cols-1 md:grid-cols-[280px_1fr_300px] h-screen h-full border-collapse"
+    },
+    "padding": "Tight inside widgets (p-3 or p-4), generous between major sections (gap-4)."
+  },
+  "components": {
+    "buttons": "rounded-none px-4 py-2 font-mono text-xs uppercase tracking-widest border border-zinc-700 hover:border-zinc-300 hover:bg-zinc-800 transition-colors. Primary button is bg-white text-black hover:bg-zinc-200.",
+    "cards": "rounded-none border border-zinc-800 bg-[#09090B] p-0 overflow-hidden. Use inner padding on sub-elements. Hard lines.",
+    "inputs": "rounded-none border border-zinc-800 bg-[#18181B] px-3 py-2 text-sm focus:border-white focus:ring-1 focus:ring-white transition-all font-mono",
+    "badges": "rounded-none border border-zinc-700 px-2 py-0.5 text-[10px] font-mono uppercase tracking-wider text-zinc-300",
+    "tables": "Dense rows. font-mono text-xs for data cells. 1px border-b border-zinc-800. No zebra striping, just hover states (hover:bg-zinc-900/50).",
+    "chat_bubbles": "rounded-none border border-zinc-800 p-3 text-sm. AI/System messages get a left border highlight of #FF5500."
+  },
+  "motion": {
+    "hover_states": "Crisp and immediate. bg-zinc-900 -> bg-zinc-800. Border color changes.",
+    "transitions": "transition-colors duration-150 ease-in-out"
+  },
+  "media_and_images": {
+    "avatar_1": "https://images.pexels.com/photos/37148308/pexels-photo-37148308.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "avatar_2": "https://images.pexels.com/photos/14589344/pexels-photo-14589344.jpeg?auto=compress&cs=tinysrgb&dpr=2&h=650&w=940",
+    "logo_abstract_1": "https://images.unsplash.com/photo-1761044590816-5180b35e99eb?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwyfHxtaW5pbWFsaXN0JTIwYWJzdHJhY3QlMjBjb21wYW55JTIwbG9nb3xlbnwwfHx8fDE3Nzc4MjMwMTZ8MA&ixlib=rb-4.1.0&q=85",
+    "logo_abstract_2": "https://images.unsplash.com/photo-1770210217380-d78a69acdc77?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NTYxODh8MHwxfHNlYXJjaHwxfHxtaW5pbWFsaXN0JTIwYWJzdHJhY3QlMjBjb21wYW55JTIwbG9nb3xlbnwwfHx8fDE3Nzc4MjMwMTZ8MA&ixlib=rb-4.1.0&q=85",
+    "rules": "Use avatars for unified inbox contacts. Use abstract logos for CRM integration placeholders. Do not use generic placeholders."
+  },
+  "icons": "phosphor-icons/react for dense dashboard usage. Weight: regular or bold.",
+  "testing": {
+    "attribute": "data-testid",
+    "rules": "All interactive elements, buttons, nav links, forms, and chat threads MUST have descriptive kebab-case data-testid attributes."
+  },
+  "instructions_to_main_agent": [
+    "Install required fonts: Chivo and JetBrains Mono.",
+    "Install @phosphor-icons/react.",
+    "Set up Tailwind dark mode with the specified color palette (Zinc scale + Industrial Orange #FF5500).",
+    "Build a multi-pane layout for the Unified Inbox module (Sidebar -> Inbox List -> Chat View -> Contact Info Sidebar).",
+    "Override all Shadcn component border radii to `rounded-none`. The aesthetic is strict, brutalist, and technical.",
+    "Use raw HTML/Tailwind for the main app scaffolding to ensure the 'Control Room' dense grid border look. Use 1px borders between all major panes.",
+    "No marketing pages. Root path `/` should render a dark, technical Login screen, routing immediately to the App Dashboard layout.",
+    "Ensure high contrast on active states (e.g., currently selected conversation in the inbox list should have a stark white left border and bg-zinc-900)."
+  ]
+}
