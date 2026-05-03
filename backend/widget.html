@@ -174,6 +174,26 @@ function meMsg(text) {
   msgs.scrollTop = msgs.scrollHeight;
 }
 
+async function postWithRetry(url, payload, attempts) {
+  attempts = attempts || 2;
+  let lastErr;
+  for (let i = 0; i <= attempts; i++) {
+    try {
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) throw new Error("HTTP " + r.status);
+      return await r.json();
+    } catch (e) {
+      lastErr = e;
+      if (i < attempts) await new Promise(r => setTimeout(r, 500 * (i + 1)));
+    }
+  }
+  throw lastErr;
+}
+
 async function send(text) {
   if (!text) return;
   meMsg(text);
@@ -183,16 +203,12 @@ async function send(text) {
   msgs.appendChild(typing);
   msgs.scrollTop = msgs.scrollHeight;
   try {
-    const r = await fetch(API + "/webchat/" + TENANT + "/message", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ channel: "webchat", external_user_id: UID, contact_name: NAME_V, text: text, agent_id: AGENT_ID || null }),
+    const j = await postWithRetry(API + "/webchat/" + TENANT + "/message", {
+      channel: "webchat", external_user_id: UID, contact_name: NAME_V,
+      text: text, agent_id: AGENT_ID || null,
     });
-    const j = await r.json();
     typing.remove();
-    // First bubble — short message
     botMsg(j.reply || "…", [], []);
-    // Second bubble — follow-up + cards (with natural delay for human feel)
     if (j.follow_up || (j.cards && j.cards.length > 0)) {
       const typing2 = document.createElement("div");
       typing2.className = "typing";
@@ -205,32 +221,60 @@ async function send(text) {
     }
   } catch (err) {
     typing.remove();
-    botMsg("Erro de ligação. Por favor tente novamente.", [], []);
+    botMsg("⚠️ Problema de ligação. A tentar novamente assim que possível.", [], []);
+    // Try once more after a short delay — works if connection just came back
+    setTimeout(() => {
+      if (navigator.onLine) send(text);
+    }, 4000);
   }
 }
 
+// Reconnect listener: when network comes back, let the user know
+window.addEventListener("online", () => {
+  if (msgs.querySelector(".typing")) return;
+  const hint = document.createElement("div");
+  hint.className = "row bot";
+  hint.appendChild(miniAvatar());
+  const m = document.createElement("div");
+  m.className = "msg";
+  m.style.background = "#DCFCE7";
+  m.style.border = "1px solid #86EFAC";
+  m.style.color = "#166534";
+  m.textContent = "Ligação reposta ✓";
+  hint.appendChild(m);
+  msgs.appendChild(hint);
+  msgs.scrollTop = msgs.scrollHeight;
+});
+
 async function loadAgent() {
-  try {
-    const url = API + "/public/agent/" + TENANT + (AGENT_ID ? "?agent_id=" + AGENT_ID : "");
-    const r = await fetch(url);
-    const j = await r.json();
-    agent = j;
-    nameEl.textContent = j.name || "Assistente";
-    document.title = (j.name || "Chat") + " · " + (j.tenant_name || "Consenso+");
-    if (j.avatar_url) {
-      avInnerEl.innerHTML = "";
-      const img = document.createElement("img");
-      img.src = j.avatar_url;
-      img.onerror = () => { avInnerEl.textContent = initials(j.name); };
-      avInnerEl.appendChild(img);
-    } else {
-      avInnerEl.textContent = initials(j.name);
-    }
-    botMsg(j.welcome_message || "Olá! Como posso ajudar?", j.icebreakers || [], []);
-  } catch (e) {
-    avInnerEl.textContent = "A";
-    botMsg("Olá! Como posso ajudar?", [], []);
+  const url = API + "/public/agent/" + TENANT + (AGENT_ID ? "?agent_id=" + AGENT_ID : "");
+  let j = null;
+  for (let i = 0; i < 3 && !j; i++) {
+    try {
+      const r = await fetch(url);
+      if (r.ok) j = await r.json();
+    } catch { /* retry */ }
+    if (!j) await new Promise(r => setTimeout(r, 500 * (i + 1)));
   }
+  if (!j) {
+    avInnerEl.textContent = "A";
+    botMsg("Olá! Estamos a ligar-nos ao servidor…", [], []);
+    setTimeout(loadAgent, 5000);
+    return;
+  }
+  agent = j;
+  nameEl.textContent = j.name || "Assistente";
+  document.title = (j.name || "Chat") + " · " + (j.tenant_name || "Consenso+");
+  if (j.avatar_url) {
+    avInnerEl.innerHTML = "";
+    const img = document.createElement("img");
+    img.src = j.avatar_url;
+    img.onerror = () => { avInnerEl.textContent = initials(j.name); };
+    avInnerEl.appendChild(img);
+  } else {
+    avInnerEl.textContent = initials(j.name);
+  }
+  botMsg(j.welcome_message || "Olá! Como posso ajudar?", j.icebreakers || [], []);
 }
 
 f.addEventListener("submit", e => {

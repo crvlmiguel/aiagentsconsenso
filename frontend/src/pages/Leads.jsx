@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { api } from "../lib/api";
 import { toast } from "sonner";
-import { Plus, Trash2, CheckCircle2 } from "lucide-react";
+import { Plus, Trash2, CheckCircle2, Download, Search } from "lucide-react";
 
 const stages = [
   { k: "new", l: "Novo", cls: "badge-ghost" },
@@ -15,9 +15,44 @@ const Leads = () => {
   const [leads, setLeads] = useState([]);
   const [newLead, setNewLead] = useState({ name: "", email: "", phone: "", company: "", stage: "new", score: 50, source: "manual", notes: "", tags: [] });
   const [show, setShow] = useState(false);
+  const [query, setQuery] = useState("");
+  const [stageFilter, setStageFilter] = useState("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
 
   const load = async () => setLeads((await api.get("/leads")).data);
   useEffect(() => { load(); }, []);
+
+  const sources = useMemo(() => Array.from(new Set(leads.map(l => l.source).filter(Boolean))), [leads]);
+
+  const filtered = useMemo(() => leads.filter(l => {
+    if (stageFilter !== "all" && l.stage !== stageFilter) return false;
+    if (sourceFilter !== "all" && l.source !== sourceFilter) return false;
+    const q = query.trim().toLowerCase();
+    if (!q) return true;
+    return [l.name, l.email, l.phone, l.company, l.notes, ...(l.tags || [])]
+      .some(v => (v || "").toLowerCase().includes(q));
+  }), [leads, query, stageFilter, sourceFilter]);
+
+  const exportCsv = () => {
+    if (filtered.length === 0) { toast.error("Nenhum lead para exportar"); return; }
+    const fields = ["name", "email", "phone", "company", "stage", "score", "source", "tags", "notes", "created_at"];
+    const escape = (v) => {
+      if (v === null || v === undefined) return "";
+      const s = Array.isArray(v) ? v.join("; ") : String(v);
+      return /[",\n;]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const header = ["Nome", "Email", "Telefone", "Empresa", "Estado", "Score", "Origem", "Tags", "Notas", "Criado em"];
+    const rows = filtered.map(l => fields.map(f => escape(l[f])).join(","));
+    const csv = "\ufeff" + [header.join(","), ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success(`${filtered.length} leads exportados`);
+  };
 
   const save = async () => {
     if (!newLead.name) return toast.error("Nome obrigatório");
@@ -34,11 +69,38 @@ const Leads = () => {
       <div className="flex items-center justify-between mb-5">
         <div>
           <h1 className="font-display text-2xl font-bold">Leads</h1>
-          <p className="text-sm text-[#5B6B82] mt-1">{leads.length} total · {leads.filter(l => l.stage === "won").length} ganhos</p>
+          <p className="text-sm text-[#5B6B82] mt-1">
+            {leads.length} total · {leads.filter(l => l.stage === "won").length} ganhos
+            {filtered.length !== leads.length && ` · ${filtered.length} filtrados`}
+          </p>
         </div>
-        <button data-testid="btn-new-lead" onClick={() => setShow(!show)} className="btn-primary">
-          <Plus size={14} /> Novo lead
-        </button>
+        <div className="flex gap-2">
+          <button data-testid="btn-export-csv" onClick={exportCsv} className="btn-ghost">
+            <Download size={14} /> Exportar CSV
+          </button>
+          <button data-testid="btn-new-lead" onClick={() => setShow(!show)} className="btn-primary">
+            <Plus size={14} /> Novo lead
+          </button>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3 mb-5">
+        <div className="relative flex-1 max-w-sm">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5B6B82] pointer-events-none" />
+          <input data-testid="leads-search" value={query} onChange={(e) => setQuery(e.target.value)}
+            placeholder="Pesquisar por nome, email, empresa…"
+            className="input-base pl-9 text-sm" />
+        </div>
+        <select data-testid="leads-filter-stage" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}
+          className="input-base text-sm w-auto">
+          <option value="all">Todos estados</option>
+          {stages.map(s => <option key={s.k} value={s.k}>{s.l}</option>)}
+        </select>
+        <select data-testid="leads-filter-source" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}
+          className="input-base text-sm w-auto">
+          <option value="all">Todas origens</option>
+          {sources.map(s => <option key={s} value={s}>{s}</option>)}
+        </select>
       </div>
 
       {show && (
@@ -89,7 +151,7 @@ const Leads = () => {
             </tr>
           </thead>
           <tbody>
-            {leads.map(l => {
+            {filtered.map(l => {
               const stage = stages.find(s => s.k === l.stage) || stages[0];
               return (
                 <tr key={l.id} data-testid={`lead-row-${l.id}`} className="border-b border-[#E5EAF2] hover:bg-[#F7F9FC]">
@@ -131,7 +193,13 @@ const Leads = () => {
             })}
           </tbody>
         </table>
-        {leads.length === 0 && <div className="p-12 text-center text-sm text-[#5B6B82]">Sem leads. Os leads gerados por IA aparecem automaticamente aqui.</div>}
+        {filtered.length === 0 && (
+          <div className="p-12 text-center text-sm text-[#5B6B82]">
+            {leads.length === 0
+              ? "Sem leads. Os leads gerados por IA aparecem automaticamente aqui."
+              : "Nenhum lead corresponde aos filtros."}
+          </div>
+        )}
       </div>
     </div>
   );
