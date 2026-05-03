@@ -328,17 +328,6 @@ async def agent_test_channel(agent_id: str, channel: str, claims=Depends(current
             j = r.json()
             return {"ok": True, "info": f"{j.get('verified_name','')} · {j.get('display_phone_number','')}"}
 
-        if channel == "instagram":
-            tok = (ch.get("access_token") or "").strip()
-            if not tok:
-                return {"ok": False, "error": "Access Token obrigatório"}
-            async with httpx.AsyncClient(timeout=10) as hc:
-                r = await hc.get("https://graph.facebook.com/v20.0/me",
-                                 headers={"Authorization": f"Bearer {tok}"})
-            if r.status_code != 200:
-                return {"ok": False, "error": f"Instagram rejeitou o token (HTTP {r.status_code})"}
-            return {"ok": True, "info": "Instagram token válido"}
-
         return {"ok": False, "error": f"Canal não suportado: {channel}"}
     except Exception as e:
         return {"ok": False, "error": f"Erro de ligação: {str(e)[:200]}"}

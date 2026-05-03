@@ -146,7 +146,8 @@ const Agentes = () => {
     const textToSend = (overrideText ?? chatInput).trim();
     if (!textToSend || !selected?.id) return;
     setChat(c => [...c, { role: "user", text: textToSend }]);
-    if (!overrideText) setChatInput(""); setChatBusy(true);
+    if (!overrideText) { setChatInput(""); }
+    setChatBusy(true);
     try {
       const { data } = await api.post(`/agents/${selected.id}/test`, { text: textToSend });
       setChat(c => [...c, { role: "ai", text: data.reply, cards: data.cards }]);
