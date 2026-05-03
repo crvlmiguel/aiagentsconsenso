@@ -986,6 +986,45 @@ async def ws_endpoint(websocket: WebSocket, tenant_id: str):
         ws_manager.disconnect(tenant_id, websocket)
 
 
+@api.post("/public/credit-simulate")
+async def public_credit_simulate(body: dict):
+    """Simulador de crédito habitação — fórmula Euribor 12m + spread médio PT 2025/2026.
+    Cálculo indicativo apenas, não vinculativo."""
+    try:
+        price = float(body.get("property_value") or 0)
+        down = float(body.get("down_payment") or 0)
+        years = int(body.get("years") or 30)
+    except (ValueError, TypeError):
+        raise HTTPException(400, "Valores inválidos")
+
+    if price <= 0 or down < 0 or years <= 0 or years > 40:
+        raise HTTPException(400, "Valores fora de intervalo")
+    if down >= price:
+        raise HTTPException(400, "Entrada igual ou superior ao valor do imóvel")
+
+    loan = price - down
+    annual_rate = 0.035  # Euribor 12m ~2.5% + spread ~1%
+    r = annual_rate / 12
+    n = years * 12
+    # Fórmula francesa (amortização constante)
+    monthly = loan * (r * (1 + r) ** n) / ((1 + r) ** n - 1)
+    total_paid = monthly * n
+    total_interest = total_paid - loan
+    ltv = round(loan / price * 100, 1)
+
+    return {
+        "ok": True,
+        "loan_amount": round(loan, 2),
+        "monthly_payment": round(monthly, 2),
+        "annual_rate": annual_rate,
+        "years": years,
+        "total_paid": round(total_paid, 2),
+        "total_interest": round(total_interest, 2),
+        "ltv_percent": ltv,
+        "disclaimer": "Valores indicativos. Euribor 12m + spread médio 2026. Consulte um consultor para simulação oficial.",
+    }
+
+
 # ======================== EMBEDDABLE WIDGET ========================
 _WIDGET_PATH = ROOT_DIR / "widget.html"
 

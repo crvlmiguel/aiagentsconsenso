@@ -21,6 +21,8 @@
   .inp button{width:44px;height:44px} /* touch-friendly */
   .ice button{padding:9px 14px;font-size:14px} /* touch-friendly */
   .card{max-width:100%;margin-left:30px}
+  .card-carousel{margin-left:30px}
+  .card-carousel.multi .card{flex:0 0 240px}
   .mini{width:24px;height:24px;font-size:9px}
   .ice{margin-left:30px}
   .typing{margin-left:30px}
@@ -57,7 +59,12 @@
 .ice{display:flex;flex-wrap:wrap;gap:6px;margin-left:34px;margin-top:2px}
 .ice button{background:#fff;border:1px solid #C7DDFF;color:#0069FE;padding:7px 13px;border-radius:999px;font:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s}
 .ice button:hover{background:#EAF2FF;transform:translateY(-1px)}
-.card{border:1px solid #E5EAF2;border-radius:18px;overflow:hidden;background:#fff;margin-left:34px;margin-top:6px;box-shadow:0 4px 16px rgba(11,19,36,.06);max-width:300px;transition:transform .2s,box-shadow .2s;animation:slideIn .3s ease-out both}
+.card-carousel{display:flex;flex-direction:column;gap:10px;margin-left:34px;margin-top:6px}
+.card-carousel.multi{flex-direction:row;overflow-x:auto;scroll-snap-type:x mandatory;padding-bottom:6px;margin-right:-14px;scrollbar-width:thin}
+.card-carousel.multi::-webkit-scrollbar{height:4px}
+.card-carousel.multi::-webkit-scrollbar-thumb{background:#C7D0DF;border-radius:2px}
+.card-carousel.multi .card{flex:0 0 260px;scroll-snap-align:start;margin:0}
+.card{border:1px solid #E5EAF2;border-radius:18px;overflow:hidden;background:#fff;box-shadow:0 4px 16px rgba(11,19,36,.06);max-width:300px;transition:transform .2s,box-shadow .2s;animation:slideIn .3s ease-out both}
 .card:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,105,254,.18)}
 .card .imgwrap{position:relative;width:100%;height:160px;background:linear-gradient(135deg,#EAF2FF 0%,#C7DDFF 100%);overflow:hidden}
 .card .imgwrap.noimg::before{content:"🏠";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:44px;filter:grayscale(.3) opacity(.55)}
@@ -147,26 +154,32 @@ function botMsg(text, icebreakers, cards, opts) {
   row.appendChild(m);
   msgs.appendChild(row);
 
-  (cards || []).forEach(c => {
-    const card = document.createElement("div");
-    card.className = "card";
-    const imgHtml = c.image
-      ? '<div class="imgwrap"><img src="' + c.image + '" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentElement.classList.add(\'noimg\');this.remove()">' + (c.price ? '<span class="tag">' + c.price + '</span>' : '') + '</div>'
-      : '';
-    let body = '<div class="b"><div class="t">' + (c.title || "") + '</div>';
-    if (c.description && c.description.indexOf("Localização") === -1) {
-      const loc = (c.description.match(/([A-Z][a-záãéêíóúçâ]+(?:,\s*[A-Z][a-záãéêíóúçâ]+)?)/) || [])[0];
-      if (loc && loc.length < 40) body += '<div class="loc">' + loc + '</div>';
-    }
-    if (c.price && !c.image) body += '<div class="p">' + c.price + '</div>';
-    if (c.description) body += '<div class="d">' + c.description + '</div>';
-    body += '</div>';
-    const linkHtml = c.link
-      ? '<a href="' + c.link + '" target="_blank" rel="noreferrer">Ver detalhes <span style="font-size:14px">→</span></a>'
-      : '';
-    card.innerHTML = imgHtml + body + linkHtml;
-    msgs.appendChild(card);
-  });
+  const allCards = cards || [];
+  if (allCards.length > 0) {
+    const carousel = document.createElement("div");
+    carousel.className = "card-carousel" + (allCards.length >= 2 ? " multi" : "");
+    allCards.forEach(c => {
+      const card = document.createElement("div");
+      card.className = "card";
+      const imgHtml = c.image
+        ? '<div class="imgwrap"><img src="' + c.image + '" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentElement.classList.add(\'noimg\');this.remove()">' + (c.price ? '<span class="tag">' + c.price + '</span>' : '') + '</div>'
+        : '';
+      let body = '<div class="b"><div class="t">' + (c.title || "") + '</div>';
+      if (c.description && c.description.indexOf("Localização") === -1) {
+        const loc = (c.description.match(/([A-Z][a-záãéêíóúçâ]+(?:,\s*[A-Z][a-záãéêíóúçâ]+)?)/) || [])[0];
+        if (loc && loc.length < 40) body += '<div class="loc">' + loc + '</div>';
+      }
+      if (c.price && !c.image) body += '<div class="p">' + c.price + '</div>';
+      if (c.description) body += '<div class="d">' + c.description + '</div>';
+      body += '</div>';
+      const linkHtml = c.link
+        ? '<a href="' + c.link + '" target="_blank" rel="noreferrer">Ver detalhes <span style="font-size:14px">→</span></a>'
+        : '';
+      card.innerHTML = imgHtml + body + linkHtml;
+      carousel.appendChild(card);
+    });
+    msgs.appendChild(carousel);
+  }
 
   if (icebreakers && icebreakers.length) {
     const box = document.createElement("div");
