@@ -74,16 +74,18 @@ const Agentes = () => {
   };
 
   // Chatbot test panel
-  const sendChat = async () => {
-    if (!chatInput.trim() || !selected?.id) return;
-    const userMsg = { role: "user", text: chatInput };
-    setChat(c => [...c, userMsg]); setChatInput(""); setChatBusy(true);
+  const sendChat = async (overrideText) => {
+    const textToSend = (overrideText ?? chatInput).trim();
+    if (!textToSend || !selected?.id) return;
+    const userMsg = { role: "user", text: textToSend };
+    setChat(c => [...c, userMsg]); if (!overrideText) setChatInput(""); setChatBusy(true);
     try {
-      const { data } = await api.post(`/agents/${selected.id}/test`, { text: userMsg.text });
+      const { data } = await api.post(`/agents/${selected.id}/test`, { text: textToSend });
       setChat(c => [...c, { role: "ai", text: data.reply, cards: data.cards, meta: { intent: data.intent, language: data.language } }]);
     } catch (e) {
-      const err = e?.response?.data?.detail || "Falha";
-      setChat(c => [...c, { role: "ai", text: `⚠ ${err}`, error: true }]);
+      const err = e?.response?.data?.detail || "API da IA não configurada ou inválida.";
+      const needsConfig = err.includes("configurada") || err.includes("configure") || err.includes("inválida");
+      setChat(c => [...c, { role: "ai", text: err, error: true, retryOf: textToSend, needsConfig }]);
     } finally {
       setChatBusy(false);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: "smooth" }), 50);
@@ -317,6 +319,16 @@ const Agentes = () => {
                       : m.error ? "bg-[#FEE2E2] border border-[#FCA5A5] text-[#991B1B] rounded-bl-sm"
                       : "bg-white border border-[#E5EAF2] rounded-bl-sm"
                     }`}>{m.text}</div>
+                    {m.error && (
+                      <div className="mt-1.5 flex gap-2">
+                        <button data-testid="btn-retry-chat" onClick={() => sendChat(m.retryOf)}
+                          className="text-[11px] font-semibold text-[#0069FE] hover:underline">↻ Tentar novamente</button>
+                        {m.needsConfig && (
+                          <button onClick={() => { setShowChat(false); setTimeout(() => document.querySelector("[data-testid='api-config-panel']")?.scrollIntoView({ behavior: "smooth" }), 100); }}
+                            className="text-[11px] font-semibold text-[#0069FE] hover:underline">Configurar API →</button>
+                        )}
+                      </div>
+                    )}
                     {m.cards?.length > 0 && (
                       <div className="mt-2 grid gap-2">
                         {m.cards.map((c, j) => (
@@ -349,7 +361,7 @@ const Agentes = () => {
                 onChange={(e) => setChatInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && sendChat()}
                 placeholder="Escrever como cliente…" className="input-base flex-1" />
-              <button data-testid="btn-send-chat" onClick={sendChat} disabled={chatBusy} className="btn-primary"><Send size={12} /></button>
+              <button data-testid="btn-send-chat" onClick={() => sendChat()} disabled={chatBusy} className="btn-primary"><Send size={12} /></button>
             </div>
           </div>
         </div>

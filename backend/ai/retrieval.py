@@ -125,12 +125,15 @@ def score_chunk(query_terms: List[str], chunk_text: str) -> float:
 
 async def retrieve(db, tenant_id: str, query: str, k: int = 6) -> List[dict]:
     """Simple keyword retrieval over the tenant's indexed chunks."""
-    terms = [t for t in re.findall(r"\w+", query.lower()) if len(t) > 2]
+    stop_pt = {"a", "o", "as", "os", "de", "do", "da", "em", "e", "ou", "no", "na", "um", "uma", "para", "por", "que", "com", "se", "é"}
+    raw_terms = re.findall(r"[\w\u00C0-\u017F]+", query.lower())
+    terms = [t for t in raw_terms if (len(t) >= 2 and t not in stop_pt)]
     if not terms:
         return []
     cur = db.data_chunks.find({"tenant_id": tenant_id}, {"_id": 0}).limit(2000)
     docs = await cur.to_list(2000)
     scored = [(score_chunk(terms, d["text"]), d) for d in docs]
     scored = [s for s in scored if s[0] > 0]
-    scored.sort(key=lambda x: -x[0])
+    # Prefer item chunks over text chunks when scores tie
+    scored.sort(key=lambda x: (-x[0], 0 if x[1].get("kind") == "item" else 1))
     return [d for _, d in scored[:k]]

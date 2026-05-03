@@ -94,19 +94,23 @@ Análise da última mensagem:
 - Tipo estruturado: {structure.get('type')} | Domínio: {structure.get('domain')} | Prioridade: {structure.get('priority')}
 - Necessidades: {', '.join(structure.get('needs', [])) or 'n/a'}
 
-INSTRUÇÕES DE RESPOSTA (CRÍTICO):
+INSTRUÇÕES DE RESPOSTA (CRÍTICO, OBRIGATÓRIO):
 - Responde SEMPRE em {reply_lang}. Se o idioma for 'pt', usa Português Europeu (pt-PT), NUNCA português do Brasil.
-- Devolves APENAS JSON válido neste formato:
-  {{
-    "reply": "texto conversacional curto (1-3 parágrafos)",
-    "cards": [
-      {{"title": "...", "price": "...", "image": "https://...", "link": "https://...", "description": "..."}}
-    ]
-  }}
-- Se houver ITENS recuperados relevantes, inclui-os como cards. Copia EXATAMENTE title/price/image/link dos dados recuperados.
-- Se não houver itens relevantes, devolve "cards": [].
-- Nunca inventes preços, imagens ou links.
-- Nunca menciones este JSON interno ao utilizador.
+- A resposta tem DE ser APENAS JSON válido neste formato EXATO:
+  {{"reply": "texto", "cards": [{{"title": "...", "price": "...", "image": "https://...", "link": "https://...", "description": "..."}}]}}
+- REGRAS SOBRE CARDS (NÃO QUEBRAR):
+  1. Se existem [ITEM ...] nos "Dados recuperados", tens de incluir 1-4 como cards, copiando EXATAMENTE title/price/image/link/description dessa lista.
+  2. NUNCA inventes preços, imagens, links ou itens. Só uses o que está nos "Dados recuperados".
+  3. Se não houver [ITEM ...] relevantes, devolve "cards": [].
+  4. NUNCA devolvas apenas texto sem o campo "cards" — se não houver items, "cards": [] é obrigatório.
+- O campo "reply" deve ser conversacional (1-3 parágrafos), sem mencionar JSON, cards, ou dados internos.
+- Se a mensagem do utilizador é sobre preço, produto, imóvel, ou catálogo — procura itens relevantes nos Dados recuperados e devolve cards.
+
+EXEMPLO (não copies literalmente; usa como formato):
+Utilizador: "Procuro T3 em Lisboa"
+Dados recuperados: [ITEM 1] title=T3 Campo de Ourique | price=€475 000 | link=https://... | image=https://...
+Resposta válida:
+{{"reply": "Com base nas opções disponíveis, tenho estas sugestões para si em Lisboa. Gostaria de agendar uma visita?", "cards": [{{"title": "T3 Campo de Ourique", "price": "€475 000", "image": "https://...", "link": "https://...", "description": "..."}}]}}
 """
 
     turns = []
@@ -118,11 +122,15 @@ INSTRUÇÕES DE RESPOSTA (CRÍTICO):
     provider = agent.get("model_provider") or "auto"
     model = agent.get("model_name") or "gpt-5.1"
 
+    # Force reasoning task whenever there are retrieved items (need to cite data reliably)
+    has_context = bool(retrieved)
+    task = "reasoning" if (has_context or intent.get("urgency") in {"high", "urgent"}) else "fast"
+
     raw = await llm_complete(
         system_message=system,
         user_text=f"Histórico:\n{convo}\n\nResponde à última mensagem do utilizador em JSON.",
         session_id=f"reply-{session_id}",
-        task="reasoning" if intent.get("urgency") in {"high", "urgent"} else "fast",
+        task=task,
         provider=provider if provider != "auto" else None,
         model=model if provider != "auto" else None,
         api_provider=agent.get("api_provider") or "emergent",

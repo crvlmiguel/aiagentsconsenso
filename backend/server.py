@@ -153,12 +153,12 @@ def _agent_is_configured(agent: dict) -> tuple[bool, str]:
     prov = (agent.get("api_provider") or "emergent").lower()
     if prov == "emergent":
         if not os.environ.get("EMERGENT_LLM_KEY"):
-            return False, "Chave Universal Emergent indisponível. Configure uma chave própria no agente."
+            return False, "API da IA não configurada ou inválida. Configure a Chave Universal Emergent ou uma chave própria no agente."
         return True, ""
     if not (agent.get("api_key") or "").strip():
-        return False, "Por favor configure a API da IA para ativar o agente."
+        return False, "API da IA não configurada ou inválida. Por favor configure a API da IA para ativar o agente."
     if prov not in {"openai", "anthropic", "gemini"}:
-        return False, "Provider de IA não suportado."
+        return False, "API da IA não configurada ou inválida. Provider não suportado."
     return True, ""
 
 

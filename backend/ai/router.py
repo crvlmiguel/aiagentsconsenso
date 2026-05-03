@@ -38,10 +38,7 @@ def _resolve_key(api_provider: str, api_key: Optional[str]) -> str:
     emergent = os.environ.get("EMERGENT_LLM_KEY", "") or EMERGENT_KEY
     if api_provider in ("emergent", "auto", "", None) or not api_key:
         if not emergent:
-            raise LLMConfigMissing(
-                "Não foi encontrada a chave de IA. Configure uma chave própria no agente "
-                "ou contacte o administrador para ativar a Chave Universal Emergent."
-            )
+            raise LLMConfigMissing("API da IA não configurada ou inválida.")
         return emergent
     return api_key
 
@@ -88,7 +85,7 @@ async def llm_complete(
             resp = await chat2.send_message(UserMessage(text=user_text))
             return str(resp)
         except Exception as e2:
-            raise LLMProviderError(f"Falha ao contactar o provider de IA ({prov}/{mdl}): {e2}") from e2
+            raise LLMProviderError(f"API da IA não configurada ou inválida. Detalhe: {str(e2)[:160]}") from e2
 
 
 async def test_connection(api_provider: str, api_key: Optional[str], model: Optional[str] = None) -> dict:
