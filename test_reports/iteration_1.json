@@ -1,0 +1,41 @@
+{
+  "summary": "First-iteration full backend + frontend E2E testing of Consenso Plus (multi-tenant AI BOS SaaS). 23/23 backend pytest tests pass including the slow AI pipeline endpoints (/api/inbound/simulate and /api/agents/{id}/test). Frontend login, all 9 sidebar nav routes, inbox 3-pane layout, inbound simulator (auto-creates lead), agents page RUN FULL PIPELINE (returns intent/structure/decision/reply JSON) and logout all work correctly. Tenant isolation verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/inbound/simulate & /api/agents/{id}/test", "issue": "LLM provider occasionally returns generic fallback text ('I'm having trouble reaching the AI service...') on first call — app handles this gracefully but intent also falls back to 'other/general/medium/0.5'. Acknowledged in problem statement as acceptable."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Inbox header — conversation detail top right", "issues": ["The 'Welcome back' toast briefly overlaps the 'TAKE OVER / CLOSE' action buttons in the top-right when first loading the inbox; minor, auto-dismisses."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/backend_test.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "None blocking. Optional: tune LLM router fallback so when provider is cold, a second retry is attempted server-side before emitting the fallback message, so intent analysis panel doesn't show 'other/general/50%' on the very first simulated message."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~540 lines — still manageable but consider splitting into routers/{auth,conversations,agents,leads,tickets,integrations,team,admin}.py as the product grows past 700 lines.",
+    "`/api/admin/tenants` returns the current tenant for non-platform_admin/owner roles as a 'read-only self view'. The role check `role != 'platform_admin' and role != 'owner'` is inverted-ish — owners get full access to ALL tenants' data (see `tenants = await db.tenants.find({})`), which is a cross-tenant leak if there were multiple real tenants registered. Should restrict full list to `platform_admin` only.",
+    "Integration PUT accepts only whitelisted keys (good). But agent.tools is a dict list without validation — consider Pydantic validation for shape.",
+    "Passwords in /api/team/invite require min length? No validation on password length — consider enforcing >=8 chars.",
+    "Mongo queries use {\"_id\": 0} projection consistently — good, prevents ObjectId serialisation bugs."
+  ],
+  "updated_files": [
+    "/app/backend/tests/__init__.py (new)",
+    "/app/backend/tests/backend_test.py (new)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% of tested flows"},
+  "test_credentials": "demo@consenso.plus / demo1234 (from /app/memory/test_credentials.md — verified working)",
+  "seed_data_creation": "Seed already ran on startup (demo tenant Acme Corp with 3 conversations, 1 lead, 1 ticket, 9 integrations, 1 agent 'Aria — Default AI'). Tests also exercised /api/auth/register which correctly creates tenant + owner + default agent + webchat integration.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend pytest suite at /app/backend/tests/backend_test.py covers all endpoints. Run via: cd /app/backend && python -m pytest tests/backend_test.py -v --junitxml=/app/test_reports/pytest/pytest_results.xml. AI pipeline tests are marked @pytest.mark.slow and may take 10-30s each. Frontend selectors use data-testid heavily: login-email/login-password/login-submit, nav-{inbox,agents,leads,tickets,integrations,analytics,team,admin,settings}, sim-{name,channel,text}, btn-simulate, btn-test-agent, btn-takeover, btn-close, btn-logout, agent-{name,tone,goal,model,system-prompt,rules,knowledge,test-input}, convo-item-{uuid}, lead-{uuid}. Integrations nav is labeled 'Channels' in UI but routes to /app/integrations. Note: The 'LOG IN →' button text has a trailing arrow, so use data-testid='login-submit' not text match.",
+  "rca of the issue": "One test (test_register_new_tenant) initially failed because the fake email used `.test` TLD which Pydantic's email-validator rejects as reserved. Fixed by using `@example.com`. Not a backend bug — purely a test-side issue."
+}
