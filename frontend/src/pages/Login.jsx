@@ -60,11 +60,8 @@ const Login = () => {
           <div className="mb-10 flex items-center gap-3">
             <img src="/consenso-icon.png" alt="Consenso+" width={44} height={44}
               style={{ width: 44, height: 44, objectFit: "contain" }} />
-            <div className="leading-tight">
-              <div className="font-display font-bold text-[22px] text-[#0B1324]">
-                Consenso<span className="text-[#0069FE]">+</span>
-              </div>
-              <div className="text-[11px] text-[#5B6B82] uppercase tracking-wider font-semibold">AI Business OS</div>
+            <div className="font-display font-bold text-[22px] text-[#0B1324] leading-none">
+              Consenso<span className="text-[#0069FE]">+</span>
             </div>
           </div>
           <h2 className="font-display text-3xl font-bold text-[#0B1324]">Iniciar sessão</h2>
