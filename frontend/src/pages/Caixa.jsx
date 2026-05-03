@@ -3,7 +3,7 @@ import { api, API } from "../lib/api";
 import { toast } from "sonner";
 import {
   Send, UserCheck, Zap, X, MessageSquare, Instagram,
-  Globe, Phone, Tag, ExternalLink, Sparkles, ArrowDown,
+  Globe, Phone, Tag, ExternalLink, Sparkles, ArrowDown, ArrowLeft,
 } from "lucide-react";
 
 const channelIcons = { webchat: Globe, whatsapp: Phone, instagram: Instagram, telegram: Send, messenger: MessageSquare };
@@ -246,9 +246,10 @@ const Caixa = () => {
   ), [messages]);
 
   return (
-    <div className="h-full grid grid-cols-[340px_1fr_340px]">
-      {/* LEFT */}
-      <div className="border-r border-[#E5EAF2] bg-white flex flex-col" data-testid="caixa-list">
+    <div className="h-full grid grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr_320px]" data-testid="caixa-root">
+      {/* LEFT list — hidden on mobile when a conversation is open */}
+      <div className={`border-r border-[#E5EAF2] bg-white flex-col h-full ${selectedId ? "hidden md:flex" : "flex"}`}
+        data-testid="caixa-list">
         <div className="p-4 border-b border-[#E5EAF2]">
           <div className="flex items-center justify-between">
             <h1 className="font-display text-xl font-bold">Caixa de entrada</h1>
@@ -291,7 +292,8 @@ const Caixa = () => {
       </div>
 
       {/* CENTER */}
-      <div className="flex flex-col h-full bg-[#F7F9FC] relative min-h-0" data-testid="caixa-thread">
+      <div className={`flex flex-col h-full bg-[#F7F9FC] relative min-h-0 ${selectedId ? "flex" : "hidden md:flex"}`}
+        data-testid="caixa-thread">
         {!conversation && !loadingThread && (
           <div className="flex-1 flex items-center justify-center text-[#5B6B82] text-sm">
             Selecione uma conversa
@@ -299,31 +301,36 @@ const Caixa = () => {
         )}
         {conversation && (
           <>
-            <div className="border-b border-[#E5EAF2] bg-white p-4 flex items-center justify-between shrink-0">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-display font-semibold text-lg">{conversation.contact_name}</span>
-                  <span className={`badge ${statusBadge[conversation.status]}`}>{statusLabel[conversation.status]}</span>
-                  {conversation.language && <span className="badge badge-ghost">{conversation.language.toUpperCase()}</span>}
-                </div>
-                <div className="text-xs text-[#5B6B82] mt-0.5 uppercase tracking-wider font-semibold">
-                  {conversation.channel} · {new Date(conversation.created_at).toLocaleDateString("pt-PT")} · {messages.length} {hasMore ? "/ + anteriores" : ""} mensagens
+            <div className="border-b border-[#E5EAF2] bg-white p-3 md:p-4 flex items-center justify-between shrink-0 gap-2">
+              <div className="flex items-center gap-2 min-w-0 flex-1">
+                <button className="md:hidden p-1.5 -ml-1 text-[#0B1324] hover:bg-[#F7F9FC] rounded-lg shrink-0"
+                  onClick={() => setSelectedId(null)} data-testid="btn-thread-back" aria-label="Voltar">
+                  <ArrowLeft size={18} />
+                </button>
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-display font-semibold text-base md:text-lg truncate">{conversation.contact_name}</span>
+                    <span className={`badge ${statusBadge[conversation.status]}`}>{statusLabel[conversation.status]}</span>
+                  </div>
+                  <div className="text-[10px] md:text-xs text-[#5B6B82] mt-0.5 uppercase tracking-wider font-semibold">
+                    {conversation.channel} · {messages.length}{hasMore ? "+ " : " "}msgs
+                  </div>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-1 md:gap-2 shrink-0">
                 {conversation.status !== "human" && (
-                  <button data-testid="btn-takeover" onClick={takeover} className="btn-ghost text-[13px]">
-                    <UserCheck size={14} /> Assumir
+                  <button data-testid="btn-takeover" onClick={takeover} className="btn-ghost text-[12px] md:text-[13px] px-2 md:px-3">
+                    <UserCheck size={13} /> <span className="hidden sm:inline">Assumir</span>
                   </button>
                 )}
                 {conversation.status === "human" && (
-                  <button data-testid="btn-release" onClick={release} className="btn-ghost text-[13px]">
-                    <Zap size={14} /> Voltar à IA
+                  <button data-testid="btn-release" onClick={release} className="btn-ghost text-[12px] md:text-[13px] px-2 md:px-3">
+                    <Zap size={13} /> <span className="hidden sm:inline">Voltar à IA</span>
                   </button>
                 )}
                 {conversation.status !== "closed" && (
-                  <button data-testid="btn-close" onClick={closeC} className="btn-ghost text-[13px] hover:text-[#DC2626]">
-                    <X size={14} /> Fechar
+                  <button data-testid="btn-close" onClick={closeC} className="btn-ghost text-[12px] md:text-[13px] hover:text-[#DC2626] px-2 md:px-3">
+                    <X size={13} /> <span className="hidden sm:inline">Fechar</span>
                   </button>
                 )}
               </div>
@@ -331,7 +338,7 @@ const Caixa = () => {
 
             <div ref={msgsContainerRef}
               onScroll={() => { if (isNearBottom()) setNewMsgPill(false); }}
-              className="flex-1 overflow-y-auto overflow-x-hidden p-6 space-y-4 min-h-0"
+              className="flex-1 overflow-y-auto overflow-x-hidden p-4 md:p-6 space-y-3 md:space-y-4 min-h-0"
               data-testid="thread-messages">
               {threadError && (
                 <div className="p-4 bg-[#FEE2E2] border border-[#FCA5A5] rounded-xl text-sm text-[#991B1B] flex items-center justify-between">
@@ -372,8 +379,8 @@ const Caixa = () => {
         )}
       </div>
 
-      {/* RIGHT */}
-      <div className="border-l border-[#E5EAF2] bg-white overflow-y-auto" data-testid="caixa-context">
+      {/* RIGHT — hidden on mobile/tablet */}
+      <div className="border-l border-[#E5EAF2] bg-white overflow-y-auto hidden xl:block" data-testid="caixa-context">
         <div className="p-5 border-b border-[#E5EAF2]">
           <div className="label">Contacto</div>
           <div className="font-display font-semibold text-lg">{conversation?.contact_name || "—"}</div>

@@ -3,18 +3,38 @@
 <head>
 <meta charset="utf-8">
 <title>Consenso+ Chat</title>
-<meta name="viewport" content="width=device-width,initial-scale=1" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,maximum-scale=1" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-*{box-sizing:border-box}body,html{margin:0;padding:0;height:100%;font-family:Inter,system-ui,sans-serif;color:#0B1324;background:#F7F9FC}
+*{box-sizing:border-box}body,html{margin:0;padding:0;height:100%;font-family:Inter,system-ui,sans-serif;color:#0B1324;background:#F7F9FC;-webkit-tap-highlight-color:transparent;-webkit-text-size-adjust:100%}
 .wrap{display:flex;flex-direction:column;height:100%;max-width:440px;margin:0 auto;background:#fff;border:1px solid #E5EAF2;overflow:hidden}
+@supports(height:100dvh){.wrap{height:100dvh}}
+:root{--vv-h:100%}
+@media(max-width:520px){
+  .wrap{max-width:100%;border:0;border-radius:0}
+  .hd{padding:14px 14px 16px}
+  .msgs{padding:12px 10px}
+  .msg{font-size:15px;padding:10px 14px}
+  .inp{padding:10px;padding-bottom:calc(10px + env(safe-area-inset-bottom))}
+  .inp input{font-size:16px;padding:12px 16px} /* 16px prevents iOS zoom on focus */
+  .inp button{width:44px;height:44px} /* touch-friendly */
+  .ice button{padding:9px 14px;font-size:14px} /* touch-friendly */
+  .card{max-width:100%;margin-left:30px}
+  .mini{width:24px;height:24px;font-size:9px}
+  .ice{margin-left:30px}
+  .typing{margin-left:30px}
+}
 .hd{background:linear-gradient(135deg,#0069FE 0%,#003F99 100%);color:#fff;padding:18px 18px 22px;display:flex;align-items:center;gap:12px;position:relative}
 .hd::after{content:"";position:absolute;inset:0;background:radial-gradient(circle at 90% 10%,rgba(255,255,255,.15) 1px,transparent 1px);background-size:24px 24px;pointer-events:none}
 .av{width:44px;height:44px;border-radius:50%;background:#EAF2FF;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#0069FE;font-weight:700;font-size:16px;position:relative;border:2px solid rgba(255,255,255,.3);z-index:1}
 .av-inner{width:100%;height:100%;border-radius:50%;overflow:hidden;display:flex;align-items:center;justify-content:center}
 .av img{width:100%;height:100%;object-fit:cover;display:block}
 .av .dot{position:absolute;bottom:0;right:0;width:12px;height:12px;background:#22c55e;border-radius:50%;box-shadow:0 0 0 2px #004db3;z-index:2;pointer-events:none}
-.hd .info{z-index:1}
+.hd .info{z-index:1;flex:1;min-width:0}
+.hd .close-btn{display:none;background:rgba(255,255,255,.15);border:0;color:#fff;width:36px;height:36px;border-radius:50%;cursor:pointer;align-items:center;justify-content:center;z-index:2;transition:background .15s;font-size:20px;font-weight:300;padding:0;line-height:1}
+.hd .close-btn:hover{background:rgba(255,255,255,.25)}
+@media(max-width:520px){.hd .close-btn{display:flex}}
 .hd .name{font-weight:600;font-size:15px;line-height:1.2}
 .hd .st{font-size:11px;opacity:.92;display:flex;align-items:center;gap:4px;margin-top:3px}
 .hd .st::before{content:"";width:6px;height:6px;background:#7CFFA3;border-radius:50%;animation:p 1.5s infinite}
@@ -75,6 +95,7 @@
       <div class="name" id="agentName">Assistente</div>
       <div class="st">Online</div>
     </div>
+    <button class="close-btn" id="closeBtn" aria-label="Fechar" type="button">×</button>
   </div>
   <div class="msgs" id="msgs"></div>
   <form class="inp" id="f"><input id="t" placeholder="Escrever mensagem..." required aria-label="Mensagem">
@@ -285,6 +306,25 @@ f.addEventListener("submit", e => {
   send(v);
 });
 loadAgent();
+
+// Close button — posts message to parent or goes back
+document.getElementById("closeBtn").addEventListener("click", () => {
+  try {
+    if (window.parent !== window) window.parent.postMessage({ type: "cp-close" }, "*");
+    else window.history.length > 1 ? window.history.back() : window.close();
+  } catch (e) { /* ignore */ }
+});
+
+// iOS visual viewport — adjust for keyboard so the input stays visible
+if (window.visualViewport) {
+  const root = document.documentElement;
+  const adjust = () => {
+    root.style.setProperty("--vv-h", window.visualViewport.height + "px");
+    msgs.scrollTop = msgs.scrollHeight;
+  };
+  window.visualViewport.addEventListener("resize", adjust);
+  window.visualViewport.addEventListener("scroll", adjust);
+}
 </script>
 </body>
 </html>

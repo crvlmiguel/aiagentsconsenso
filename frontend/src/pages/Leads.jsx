@@ -65,42 +65,44 @@ const Leads = () => {
   const syncCrm = async (id) => { await api.post(`/leads/${id}/sync-crm`); load(); toast.success("Sincronizado com CRM"); };
 
   return (
-    <div className="h-full overflow-y-auto p-8">
-      <div className="flex items-center justify-between mb-5">
+    <div className="h-full overflow-y-auto p-4 md:p-8">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 md:mb-5 gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold">Leads</h1>
-          <p className="text-sm text-[#5B6B82] mt-1">
+          <h1 className="font-display text-xl md:text-2xl font-bold">Leads</h1>
+          <p className="text-xs md:text-sm text-[#5B6B82] mt-1">
             {leads.length} total · {leads.filter(l => l.stage === "won").length} ganhos
             {filtered.length !== leads.length && ` · ${filtered.length} filtrados`}
           </p>
         </div>
         <div className="flex gap-2">
-          <button data-testid="btn-export-csv" onClick={exportCsv} className="btn-ghost">
-            <Download size={14} /> Exportar CSV
+          <button data-testid="btn-export-csv" onClick={exportCsv} className="btn-ghost flex-1 sm:flex-initial justify-center">
+            <Download size={14} /> <span className="hidden sm:inline">Exportar CSV</span><span className="sm:hidden">CSV</span>
           </button>
-          <button data-testid="btn-new-lead" onClick={() => setShow(!show)} className="btn-primary">
+          <button data-testid="btn-new-lead" onClick={() => setShow(!show)} className="btn-primary flex-1 sm:flex-initial justify-center">
             <Plus size={14} /> Novo lead
           </button>
         </div>
       </div>
 
-      <div className="flex items-center gap-3 mb-5">
-        <div className="relative flex-1 max-w-sm">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 md:gap-3 mb-4 md:mb-5">
+        <div className="relative flex-1 sm:max-w-sm">
           <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#5B6B82] pointer-events-none" />
           <input data-testid="leads-search" value={query} onChange={(e) => setQuery(e.target.value)}
-            placeholder="Pesquisar por nome, email, empresa…"
+            placeholder="Pesquisar por nome, email…"
             className="input-base pl-9 text-sm" />
         </div>
-        <select data-testid="leads-filter-stage" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}
-          className="input-base text-sm w-auto">
-          <option value="all">Todos estados</option>
-          {stages.map(s => <option key={s.k} value={s.k}>{s.l}</option>)}
-        </select>
-        <select data-testid="leads-filter-source" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}
-          className="input-base text-sm w-auto">
-          <option value="all">Todas origens</option>
-          {sources.map(s => <option key={s} value={s}>{s}</option>)}
-        </select>
+        <div className="flex gap-2">
+          <select data-testid="leads-filter-stage" value={stageFilter} onChange={(e) => setStageFilter(e.target.value)}
+            className="input-base text-sm flex-1 sm:flex-initial">
+            <option value="all">Todos estados</option>
+            {stages.map(s => <option key={s.k} value={s.k}>{s.l}</option>)}
+          </select>
+          <select data-testid="leads-filter-source" value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)}
+            className="input-base text-sm flex-1 sm:flex-initial">
+            <option value="all">Todas origens</option>
+            {sources.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
       </div>
 
       {show && (
@@ -134,8 +136,8 @@ const Leads = () => {
         </div>
       )}
 
-      <div className="card-surface overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="card-surface overflow-x-auto">
+        <table className="w-full text-sm min-w-[900px]">
           <thead>
             <tr className="border-b border-[#E5EAF2] text-left text-[#5B6B82] text-[11px] uppercase tracking-wider font-semibold">
               <th className="p-4">Nome</th>

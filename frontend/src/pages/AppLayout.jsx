@@ -1,6 +1,6 @@
 import React from "react";
 import { Outlet, Navigate } from "react-router-dom";
-import Sidebar from "../components/Sidebar";
+import Sidebar, { MobileTopbar, SidebarProvider } from "../components/Sidebar";
 import { useAuth } from "../lib/auth";
 
 const AppLayout = () => {
@@ -14,10 +14,17 @@ const AppLayout = () => {
   }
   if (!user) return <Navigate to="/iniciar-sessao" replace />;
   return (
-    <div className="h-screen grid grid-cols-[256px_1fr] bg-[#F7F9FC]">
-      <Sidebar />
-      <main className="overflow-hidden" data-testid="app-main"><Outlet /></main>
-    </div>
+    <SidebarProvider>
+      <div className="h-screen md:grid md:grid-cols-[256px_1fr] bg-[#F7F9FC] flex flex-col">
+        <Sidebar />
+        <div className="flex flex-col min-w-0 flex-1 overflow-hidden">
+          <MobileTopbar />
+          <main className="flex-1 overflow-hidden min-h-0" data-testid="app-main">
+            <Outlet />
+          </main>
+        </div>
+      </div>
+    </SidebarProvider>
   );
 };
 

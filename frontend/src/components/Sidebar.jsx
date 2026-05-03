@@ -1,8 +1,8 @@
-import React from "react";
-import { NavLink, useNavigate } from "react-router-dom";
+import React, { useState, useEffect, createContext, useContext } from "react";
+import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
   Inbox, Bot, Users, LifeBuoy, BarChart3, UserPlus,
-  Settings as SettingsIcon, Shield, LogOut, Database, Wand2,
+  Settings as SettingsIcon, Shield, LogOut, Database, Wand2, Menu, X,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
 import { Logo } from "./Brand";
@@ -26,66 +26,116 @@ const items = [
   { section: "admin", to: "/app/definicoes", label: "Definições", icon: SettingsIcon, tid: "nav-definicoes" },
 ];
 
+// Context so AppLayout and Sidebar share open/close state
+const SidebarCtx = createContext({ open: false, setOpen: () => {} });
+export const useSidebar = () => useContext(SidebarCtx);
+export const SidebarProvider = ({ children }) => {
+  const [open, setOpen] = useState(false);
+  return <SidebarCtx.Provider value={{ open, setOpen }}>{children}</SidebarCtx.Provider>;
+};
+
 const Sidebar = () => {
   const { user, tenant, logout } = useAuth();
   const nav = useNavigate();
+  const location = useLocation();
+  const { open, setOpen } = useSidebar();
+
+  // Auto-close drawer on route change (mobile)
+  useEffect(() => { setOpen(false); }, [location.pathname, setOpen]);
+
+  // Lock body scroll when drawer is open
+  useEffect(() => {
+    if (open) document.body.style.overflow = "hidden";
+    else document.body.style.overflow = "";
+    return () => { document.body.style.overflow = ""; };
+  }, [open]);
 
   return (
-    <aside data-testid="sidebar" className="w-64 bg-white border-r border-[#E5EAF2] flex flex-col h-screen">
-      <div className="px-5 py-5 border-b border-[#E5EAF2]">
-        <button data-testid="sidebar-logo" onClick={() => nav("/app/caixa")} className="flex items-center hover:opacity-80">
-          <Logo size={26} />
-        </button>
-      </div>
-
-      <div className="px-5 py-4 border-b border-[#E5EAF2]">
-        <div className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">Organização</div>
-        <div className="text-sm font-semibold mt-0.5 truncate">{tenant?.name || "—"}</div>
-        <div className="flex items-center gap-1.5 mt-1">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] live-dot" />
-          <span className="text-[11px] text-[#5B6B82] uppercase tracking-wider">{tenant?.plan || "FREE"}</span>
+    <>
+      {/* Mobile backdrop */}
+      {open && (
+        <div className="md:hidden fixed inset-0 bg-black/40 z-40 backdrop-blur-sm"
+          onClick={() => setOpen(false)} data-testid="sidebar-backdrop" />
+      )}
+      <aside data-testid="sidebar"
+        className={`bg-white border-r border-[#E5EAF2] flex flex-col
+          fixed md:static inset-y-0 left-0 z-50 w-72 md:w-64
+          transition-transform duration-200 ease-out
+          ${open ? "translate-x-0" : "-translate-x-full"} md:translate-x-0`}>
+        <div className="px-5 py-5 border-b border-[#E5EAF2] flex items-center justify-between">
+          <button data-testid="sidebar-logo" onClick={() => nav("/app/caixa")} className="flex items-center hover:opacity-80">
+            <Logo size={26} />
+          </button>
+          <button className="md:hidden p-1 text-[#5B6B82] hover:text-[#0B1324]"
+            onClick={() => setOpen(false)} data-testid="sidebar-close" aria-label="Fechar menu">
+            <X size={20} />
+          </button>
         </div>
-      </div>
 
-      <nav className="flex-1 overflow-y-auto py-3 px-2">
-        {items.map((it, i) => {
-          if (it.heading) {
+        <div className="px-5 py-4 border-b border-[#E5EAF2]">
+          <div className="text-[11px] font-semibold text-[#5B6B82] uppercase tracking-wider">Organização</div>
+          <div className="text-sm font-semibold mt-0.5 truncate">{tenant?.name || "—"}</div>
+          <div className="flex items-center gap-1.5 mt-1">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#16A34A] live-dot" />
+            <span className="text-[11px] text-[#5B6B82] uppercase tracking-wider">{tenant?.plan || "FREE"}</span>
+          </div>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-3 px-2">
+          {items.map((it, i) => {
+            if (it.heading) {
+              return (
+                <div key={`h-${i}`} className="text-[10px] font-bold text-[#9AA4B6] uppercase tracking-widest px-3 mt-4 mb-1">
+                  {it.heading}
+                </div>
+              );
+            }
             return (
-              <div key={`h-${i}`} className="text-[10px] font-bold text-[#9AA4B6] uppercase tracking-widest px-3 mt-4 mb-1">
-                {it.heading}
-              </div>
+              <NavLink key={it.to} to={it.to} data-testid={it.tid}
+                className={({ isActive }) =>
+                  `flex items-center gap-2.5 px-3 py-2.5 md:py-2 rounded-lg text-sm font-medium mb-0.5 transition-colors ${
+                    isActive ? "bg-[#EAF2FF] text-[#0069FE]" : "text-[#2C3A52] hover:bg-[#F7F9FC]"
+                  }`
+                }>
+                <it.icon size={16} strokeWidth={2} />
+                <span className="flex-1">{it.label}</span>
+                {it.badge && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0069FE] text-white tracking-wider">{it.badge}</span>}
+              </NavLink>
             );
-          }
-          return (
-            <NavLink key={it.to} to={it.to} data-testid={it.tid}
-              className={({ isActive }) =>
-                `flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm font-medium mb-0.5 transition-colors ${
-                  isActive ? "bg-[#EAF2FF] text-[#0069FE]" : "text-[#2C3A52] hover:bg-[#F7F9FC]"
-                }`
-              }>
-              <it.icon size={16} strokeWidth={2} />
-              <span className="flex-1">{it.label}</span>
-              {it.badge && <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#0069FE] text-white tracking-wider">{it.badge}</span>}
-            </NavLink>
-          );
-        })}
-      </nav>
+          })}
+        </nav>
 
-      <div className="border-t border-[#E5EAF2] p-3">
-        <div className="flex items-center gap-2 px-2 py-2 rounded-lg">
-          <div className="w-8 h-8 rounded-full bg-[#EAF2FF] text-[#0069FE] font-bold text-xs flex items-center justify-center">
-            {(user?.name || "U").slice(0, 2).toUpperCase()}
+        <div className="border-t border-[#E5EAF2] p-3">
+          <div className="flex items-center gap-2 px-2 py-2 rounded-lg">
+            <div className="w-8 h-8 rounded-full bg-[#EAF2FF] text-[#0069FE] font-bold text-xs flex items-center justify-center shrink-0">
+              {(user?.name || "U").slice(0, 2).toUpperCase()}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="text-xs font-semibold truncate text-[#0B1324]">{user?.name}</div>
+              <div className="text-[11px] text-[#5B6B82] truncate">{user?.email}</div>
+            </div>
           </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-xs font-semibold truncate text-[#0B1324]">{user?.name}</div>
-            <div className="text-[11px] text-[#5B6B82] truncate">{user?.email}</div>
-          </div>
+          <button data-testid="btn-logout" onClick={logout} className="btn-ghost w-full justify-center mt-2 text-[13px]">
+            <LogOut size={14} /> Terminar sessão
+          </button>
         </div>
-        <button data-testid="btn-logout" onClick={logout} className="btn-ghost w-full justify-center mt-2 text-[13px]">
-          <LogOut size={14} /> Terminar sessão
-        </button>
-      </div>
-    </aside>
+      </aside>
+    </>
+  );
+};
+
+// Exported mobile topbar so AppLayout can show hamburger
+export const MobileTopbar = () => {
+  const { setOpen } = useSidebar();
+  return (
+    <div className="md:hidden sticky top-0 z-30 bg-white border-b border-[#E5EAF2] flex items-center gap-3 px-4 py-3">
+      <button data-testid="sidebar-toggle" onClick={() => setOpen(true)}
+        className="p-1.5 -ml-1 text-[#0B1324] hover:bg-[#F7F9FC] rounded-lg"
+        aria-label="Abrir menu">
+        <Menu size={22} />
+      </button>
+      <Logo size={24} />
+    </div>
   );
 };
 

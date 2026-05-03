@@ -42,7 +42,11 @@
       '#cp-err{position:fixed!important;bottom:92px!important;right:20px!important;width:300px!important;padding:14px 16px!important;background:#fff!important;border:1px solid #FCA5A5!important;border-radius:12px!important;box-shadow:0 20px 60px rgba(11,19,36,.22)!important;z-index:2147483645!important;font-family:system-ui,sans-serif!important;font-size:13px!important;color:#991B1B!important;display:none}' +
       '#cp-err.cp-open{display:block}' +
       '@keyframes cpP{0%,100%{opacity:1}50%{opacity:.5}}' +
-      '@media(max-width:520px){#cp-frame{width:calc(100vw - 20px)!important;right:10px!important;left:10px!important;bottom:82px!important}}';
+      '@media(max-width:520px){' +
+        '#cp-launcher{bottom:16px!important;right:16px!important;width:56px!important;height:56px!important}' +
+        '#cp-frame{width:100vw!important;height:100%!important;max-width:100vw!important;max-height:100%!important;bottom:0!important;right:0!important;left:0!important;top:0!important;border-radius:0!important}' +
+        '#cp-frame.cp-open~#cp-launcher,body:has(#cp-frame.cp-open) #cp-launcher{display:none!important}' +
+      '}';
     document.head.appendChild(css);
 
     function mountIcon() {
@@ -112,6 +116,13 @@
         close: function () { if (frame) frame.classList.remove("cp-open"); },
         tenantId: tenantId, agentId: agentId,
       };
+
+      // Listen for close events from the iframe (mobile fullscreen "×" button)
+      window.addEventListener("message", function (ev) {
+        if (ev && ev.data && ev.data.type === "cp-close" && frame) {
+          frame.classList.remove("cp-open");
+        }
+      });
     }
 
     // Ensure DOM is ready before mounting

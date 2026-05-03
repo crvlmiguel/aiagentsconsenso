@@ -15,26 +15,26 @@ const Painel = () => {
   if (!stats) return <div className="p-8 text-sm text-[#5B6B82]">A carregar…</div>;
 
   const KPI = ({ icon: Icon, label, value, color }) => (
-    <div className="card-surface p-5">
+    <div className="card-surface p-4 md:p-5">
       <div className="flex items-center justify-between">
-        <div className="w-10 h-10 rounded-lg flex items-center justify-center" style={{ background: color + "18", color: color }}>
-          <Icon size={18} />
+        <div className="w-9 h-9 md:w-10 md:h-10 rounded-lg flex items-center justify-center" style={{ background: color + "18", color: color }}>
+          <Icon size={16} />
         </div>
         <TrendingUp size={14} className="text-[#16A34A]" />
       </div>
-      <div className="text-3xl font-display font-bold mt-4">{value}</div>
-      <div className="text-xs text-[#5B6B82] mt-1 uppercase tracking-wider font-medium">{label}</div>
+      <div className="text-2xl md:text-3xl font-display font-bold mt-3 md:mt-4 leading-tight">{value}</div>
+      <div className="text-[10px] md:text-xs text-[#5B6B82] mt-1 uppercase tracking-wider font-medium">{label}</div>
     </div>
   );
 
   return (
-    <div className="h-full overflow-y-auto p-8 space-y-6" data-testid="painel-page">
+    <div className="h-full overflow-y-auto p-4 md:p-8 space-y-5 md:space-y-6" data-testid="painel-page">
       <div>
-        <h1 className="font-display text-2xl font-bold">Painel</h1>
-        <p className="text-sm text-[#5B6B82] mt-1">Visão geral do seu sistema operativo de IA.</p>
+        <h1 className="font-display text-xl md:text-2xl font-bold">Painel</h1>
+        <p className="text-xs md:text-sm text-[#5B6B82] mt-1">Visão geral do seu sistema operativo de IA.</p>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 md:gap-4">
         <KPI icon={Inbox} label="Conversas" value={stats.conversations} color="#0069FE" />
         <KPI icon={MessageSquare} label="Em aberto" value={stats.open_conversations} color="#D97706" />
         <KPI icon={MessageSquare} label="Mensagens" value={stats.messages} color="#8B5CF6" />
@@ -42,7 +42,7 @@ const Painel = () => {
         <KPI icon={LifeBuoy} label="Tickets abertos" value={stats.open_tickets} color="#DC2626" />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="card-surface p-5">
           <div className="font-display font-semibold">Conversas por canal</div>
           <p className="text-xs text-[#5B6B82] mt-0.5">Distribuição ao longo dos canais ligados.</p>
