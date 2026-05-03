@@ -1,7 +1,32 @@
-# Consenso Plus — PRD (v3.1)
+# Consenso Plus — PRD (v3.2)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+
+## v3.2 (2026-05-03) — FIX crítico da Inbox (scroll)
+
+### Bugs corrigidos
+- Scroll saltava para o topo ao mudar de conversa
+- Scroll era "roubado" ao receber mensagem via WebSocket mesmo quando o utilizador estava a ler histórico antigo
+- WebSocket reconectava a cada troca de conversa (memory leak potencial)
+- Re-render completo da lista de mensagens a cada evento → lag com conversas longas
+
+### Correções
+- WebSocket abre **uma só vez** no mount, com auto-reconnect; usa `selectedIdRef` para filtrar eventos
+- Mensagens chegadas via WS são **adicionadas incrementalmente** (com dedup por id), não refazem fetch
+- Scroll manipulado apenas no `msgsContainerRef` (nunca `scrollIntoView` que movia o viewport pai)
+- **Só** auto-scrolla se utilizador estava perto do fundo (`<120px`) OU se foi o próprio a enviar. Caso contrário aparece pill **"Novas mensagens ↓"** (`btn-new-msg-pill`)
+- `React.memo` em `ConvoItem`/`MessageRow` + `useMemo` na lista renderizada → zero re-renders desnecessários
+- Error state com botão "Tentar novamente" se fetch do thread falhar
+
+### Verificação end-to-end (iteration_6 — 10/10)
+- [x] Scroll inicial no fundo numa conversa de 200 mensagens
+- [x] Scroll manual para o topo preservado (sem auto-jump após 5s idle)
+- [x] Mudar de conversa e voltar → snap to bottom correto
+- [x] Enviar mensagem própria → scroll para o fundo
+- [x] Mensagem noutra conversa via WS não afeta scroll da atual
+- [x] 5 mudanças consecutivas → só 1 WebSocket ativo (zero leak)
+- [x] Zero console errors
 
 ## v3.1 (2026-05-03) — FIX crítico do widget (script + shortcode)
 
