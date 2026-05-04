@@ -201,6 +201,9 @@ const Agentes = () => {
   const iframeSrc = selected?.id
     ? `${backendUrl}/api/widget/${selected.tenant_id}?api=${encodeURIComponent(backendUrl + "/api")}&tenant=${selected.tenant_id}&agent=${selected.id}`
     : "";
+  const iframeSnippet = selected?.id
+    ? `<!-- Consenso+ Chatbot · iFrame -->\n<iframe\n  src="${iframeSrc}"\n  title="${(selected.name || "Chat").replace(/"/g, "&quot;")}"\n  width="100%"\n  height="640"\n  style="border:0;border-radius:12px;max-width:480px;box-shadow:0 4px 24px rgba(0,0,0,.08)"\n  allow="clipboard-write"\n  loading="lazy">\n</iframe>`
+    : "";
   const testPageUrl = selected?.id
     ? `${backendUrl}/api/widget-test/${selected.tenant_id}/${selected.id}`
     : "";
@@ -683,9 +686,10 @@ const Agentes = () => {
                 <div className="card-surface p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Code2 size={16} className="text-[#0069FE]" />
-                    <div className="font-display font-semibold">Opção 1 — Script (HTML / Qualquer site)</div>
+                    <div className="font-display font-semibold">Opção 1 — Script (recomendado)</div>
+                    <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#DBEAFE] text-[#0049B5] uppercase tracking-wider">Bolha flutuante</span>
                   </div>
-                  <p className="text-xs text-[#5B6B82] mb-3">Cole este código antes de <code>&lt;/body&gt;</code>. O ícone flutuante aparece automaticamente.</p>
+                  <p className="text-xs text-[#5B6B82] mb-3">Cole este código antes de <code>&lt;/body&gt;</code>. Cria automaticamente um ícone flutuante no canto da página.</p>
                   <div className="relative">
                     <pre className="bg-[#F7F9FC] border border-[#E5EAF2] rounded-lg p-4 pr-24 text-xs overflow-x-auto whitespace-pre-wrap">{scriptSnippet || "Guarde o agente para gerar o código."}</pre>
                     {selected.id && (
@@ -700,7 +704,30 @@ const Agentes = () => {
                 <div className="card-surface p-6">
                   <div className="flex items-center gap-2 mb-1">
                     <Code2 size={16} className="text-[#0069FE]" />
-                    <div className="font-display font-semibold">Opção 2 — Shortcode (WordPress)</div>
+                    <div className="font-display font-semibold">Opção 2 — iFrame</div>
+                    <span className="ml-auto text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#EDE9FE] text-[#5B21B6] uppercase tracking-wider">Embutido</span>
+                  </div>
+                  <p className="text-xs text-[#5B6B82] mb-3">
+                    Cole este código <b>onde quiser que o chat apareça embutido na página</b> (ex.: secção de contacto, página de produto). Reflete sempre as últimas configurações deste agente.
+                  </p>
+                  <div className="relative">
+                    <pre data-testid="iframe-snippet" className="bg-[#F7F9FC] border border-[#E5EAF2] rounded-lg p-4 pr-24 text-xs overflow-x-auto whitespace-pre-wrap">{iframeSnippet || "Guarde o agente para gerar o código."}</pre>
+                    {selected.id && (
+                      <button data-testid="btn-copy-iframe" onClick={() => copy("iframe", iframeSnippet)}
+                        className="absolute top-2 right-2 btn-ghost text-[11px] py-1">
+                        <Copy size={10} /> {copied === "iframe" ? "Copiado" : "Copiar"}
+                      </button>
+                    )}
+                  </div>
+                  <p className="mt-3 text-[11px] text-[#5B6B82]">
+                    💡 Ajuste <code>height</code> e <code>max-width</code> ao seu layout. O chat é responsivo e funciona em qualquer site, sem CORS.
+                  </p>
+                </div>
+
+                <div className="card-surface p-6">
+                  <div className="flex items-center gap-2 mb-1">
+                    <Code2 size={16} className="text-[#0069FE]" />
+                    <div className="font-display font-semibold">Opção 3 — Shortcode (WordPress)</div>
                   </div>
                   <p className="text-xs text-[#5B6B82] mb-3">Requer o plugin oficial Consenso+ ou a função PHP abaixo em <code>functions.php</code>.</p>
                   <div className="relative">
@@ -728,10 +755,10 @@ const Agentes = () => {
                 <div className="card-surface p-6">
                   <div className="font-display font-semibold mb-3">Passos de instalação</div>
                   <ol className="space-y-2 text-sm text-[#2C3A52]">
-                    <li>1. Copie o script (Opção 1) ou shortcode (Opção 2).</li>
-                    <li>2. Cole antes de <code>&lt;/body&gt;</code> no HTML do seu site (no footer).</li>
-                    <li>3. Publique/guarde. Um ícone flutuante azul aparece no canto inferior direito.</li>
-                    <li>4. Ao clicar, abre a janela de chat com o agente <b>{selected.name}</b>.</li>
+                    <li>1. Escolha a opção que melhor encaixa: <b>Script</b> (bolha flutuante) ou <b>iFrame</b> (embutido na página).</li>
+                    <li>2. Copie o código respetivo.</li>
+                    <li>3. Cole no HTML do seu site (antes de <code>&lt;/body&gt;</code> para o Script; em qualquer secção para o iFrame).</li>
+                    <li>4. Publique. O agente <b>{selected.name}</b> fica disponível imediatamente.</li>
                   </ol>
                 </div>
 
@@ -752,7 +779,7 @@ const Agentes = () => {
                 {selected.id && (
                   <div className="card-surface p-6">
                     <div className="flex items-center justify-between mb-3">
-                      <div className="font-display font-semibold">Pré-visualização direta (iframe)</div>
+                      <div className="font-display font-semibold">Pré-visualização (iFrame em direto)</div>
                       <a data-testid="btn-open-widget" href={iframeSrc} target="_blank" rel="noreferrer" className="btn-ghost text-[12px]">
                         <Eye size={11} /> Abrir em separador
                       </a>

@@ -1084,7 +1084,17 @@ def _load_widget() -> str:
 
 @api.get("/widget/{tenant_id}", response_class=HTMLResponse)
 async def widget_api(tenant_id: str):
-    return HTMLResponse(_load_widget())
+    # Headers explícitos para permitir embed iframe cross-origin
+    return HTMLResponse(
+        _load_widget(),
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Content-Security-Policy": "frame-ancestors *",
+            # Override any default DENY
+            "X-Frame-Options": "ALLOWALL",
+            "Cache-Control": "public, max-age=300",
+        },
+    )
 
 
 _WIDGET_JS_PATH = ROOT_DIR / "widget.js"
