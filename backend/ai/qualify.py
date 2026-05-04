@@ -71,7 +71,8 @@ def _normalize(d: dict) -> dict:
         if not t:
             continue
         # banir tags genéricas legadas
-        if t.lower() in {"sales", "general", "support", "billing", "technical", "other"}:
+        if t.lower() in {"sales", "general", "support", "billing", "technical", "other",
+                         "high", "urgent", "low", "medium"}:
             continue
         if t.lower() in {s.replace("_", " ") for s in FUNNEL_STATES}:
             continue
