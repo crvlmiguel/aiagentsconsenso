@@ -292,7 +292,7 @@ async def seed():
     print(f"✓ Fonte de dados com {len(PROPERTIES)} imóveis indexados")
     print(f"✓ Login para testar: {ADMIN_EMAIL}")
     print(f"\nURL do widget de teste:")
-    backend = os.environ.get("BACKEND_PUBLIC_URL", "https://business-os-hub-3.preview.emergentagent.com")
+    backend = os.environ.get("BACKEND_PUBLIC_URL", "<your-domain>")
     print(f"   {backend}/api/widget-test/{tenant_id}/{agent_id}")
     client.close()
 

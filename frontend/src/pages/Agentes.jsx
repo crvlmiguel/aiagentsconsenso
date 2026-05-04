@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import {
   Bot, Trash2, Plus, Save, Sparkles, Database,
   KeyRound, CheckCircle2, AlertTriangle, MessageSquare, Send, X,
-  Mail, Copy, Globe, Phone, Code2, Eye, Zap,
+  Mail, Copy, Globe, Phone, Code2, Eye, Zap, Instagram, Lock,
 } from "lucide-react";
 
 const defaultAgent = {
@@ -490,7 +490,34 @@ const Agentes = () => {
                   { k: "telegram", label: "Telegram", Icon: Send, fields: [
                     { f: "bot_token", l: "Bot Token", type: "password", ph: "1234:ABC-DEF_abc..." },
                   ]},
+                  { k: "instagram", label: "Instagram", Icon: Instagram, comingSoon: true },
+                  { k: "messenger", label: "Facebook Messenger", Icon: MessageSquare, comingSoon: true },
                 ].map(ch => {
+                  if (ch.comingSoon) {
+                    return (
+                      <div key={ch.k} data-testid={`channel-${ch.k}`}
+                        className="border border-[#E5EAF2] rounded-xl p-4 opacity-60 cursor-not-allowed select-none relative bg-[#FAFBFC]"
+                        onClick={() => toast("Este canal estará disponível em breve.", { icon: "🔒" })}>
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-lg bg-[#F1F5F9] text-[#5B6B82] flex items-center justify-center">
+                              <ch.Icon size={15} />
+                            </div>
+                            <span className="font-semibold text-[#5B6B82]">{ch.label}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="badge badge-amber inline-flex items-center gap-1">
+                              <Lock size={9} /> Brevemente
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-[11px] text-[#5B6B82] mt-2 ml-12">
+                          {ch.k === "instagram" && "Integração com Instagram Direct para comerciais e suporte. Em desenvolvimento."}
+                          {ch.k === "messenger" && "Integração com Facebook Messenger via Meta Business. Em desenvolvimento."}
+                        </div>
+                      </div>
+                    );
+                  }
                   const cfg = (selected.channels && selected.channels[ch.k]) || {};
                   const test = channelTests[ch.k];
                   const webhookUrl = ch.k === "whatsapp"
