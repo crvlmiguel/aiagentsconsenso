@@ -24,6 +24,7 @@ from auth import hash_password, verify_password, create_token, current_user
 from ai.intent import classify_intent
 from ai.structure import structure_message
 from ai.orchestrator import decide_actions, generate_response
+from ai.qualify import qualify_conversation
 from ai.tools import execute_actions
 from ai.retrieval import scrape_url, build_chunks, retrieve
 from ai.router import test_connection as llm_test_connection, LLMConfigMissing, LLMProviderError
@@ -603,6 +604,37 @@ async def add_tag(conv_id: str, body: dict, claims=Depends(current_user)):
     return {"ok": True}
 
 
+@api.post("/conversations/{conv_id}/qualify")
+async def refresh_qualification(conv_id: str, claims=Depends(current_user)):
+    """Recalcula a qualificação CRM a pedido (botão refresh na UI)."""
+    convo = await db.conversations.find_one(
+        {"id": conv_id, "tenant_id": claims["tenant_id"]}, {"_id": 0}
+    )
+    if not convo:
+        raise HTTPException(404, "Conversa não encontrada")
+
+    history = await db.messages.find(
+        {"conversation_id": conv_id}, {"_id": 0}
+    ).sort("created_at", 1).to_list(200)
+
+    agent = await db.agents.find_one({"id": convo.get("agent_id")}, {"_id": 0}) if convo.get("agent_id") else None
+    ap = (agent or {}).get("api_provider", "emergent")
+    ak = (agent or {}).get("api_key", "")
+
+    qualification = await qualify_conversation(history, conv_id, ap, ak)
+    qualification["updated_at"] = now_iso()
+
+    await db.conversations.update_one(
+        {"id": conv_id},
+        {"$set": {"qualification": qualification, "tags": qualification.get("tags", [])}},
+    )
+    await ws_manager.broadcast(
+        claims["tenant_id"],
+        {"type": "conversation_update", "conversation_id": conv_id},
+    )
+    return {"ok": True, "qualification": qualification}
+
+
 # ======================== INBOUND PIPELINE ========================
 async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Optional[str] = None) -> dict:
     tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
@@ -699,21 +731,7 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
     except (LLMConfigMissing, LLMProviderError) as e:
         resp = {"reply": str(e), "cards": [], "language": lang}
 
-    # Auto-tag lead from structure
-    auto_tags = []
-    if structure.get("domain") == "sales":
-        auto_tags.append("sales")
-    if structure.get("priority") in {"high", "urgent"}:
-        auto_tags.append(structure.get("priority"))
-    if intent.get("intent"):
-        auto_tags.append(intent["intent"])
-
     action_results = await execute_actions(db, tenant_id, conv_id, decision.get("actions", []))
-    # Attach tags + send email notification for AI-created leads
-    for a in action_results:
-        if a.get("tool") == "create_lead" and a.get("ok"):
-            await db.leads.update_one({"id": a["id"]}, {"$set": {"tags": list(set(auto_tags))}})
-            await _notify_new_lead(tenant_id, a["id"], agent)
 
     ai_msg = {
         "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
@@ -742,14 +760,42 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
         if follow_up_text:
             last_text_for_preview = follow_up_text
 
+    # ===== CRM Qualification (run AFTER all messages are persisted) =====
+    qualification = None
+    try:
+        full_history = history + [{"sender": "ai", "text": resp["reply"]}]
+        if follow_up_text:
+            full_history.append({"sender": "ai", "text": follow_up_text})
+        qualification = await qualify_conversation(full_history, session, ap, ak)
+        qualification["updated_at"] = now_iso()
+    except Exception as e:
+        logger.warning(f"qualify failed for conv {conv_id}: {e}")
+
+    # Conversation tags = ONLY the secondary attribute tags from qualification
+    # (no more legacy 'sales' / 'general' / intent name spam)
+    new_conv_tags = qualification.get("tags", []) if qualification else (convo.get("tags") or [])
+
+    # Update leads created in this turn with the qualification snapshot
+    for a in action_results:
+        if a.get("tool") == "create_lead" and a.get("ok"):
+            lead_update = {"tags": new_conv_tags}
+            if qualification:
+                lead_update["qualification_status"] = qualification["status"]
+            await db.leads.update_one({"id": a["id"]}, {"$set": lead_update})
+            await _notify_new_lead(tenant_id, a["id"], agent)
+
+    conv_update = {
+        "last_message": last_text_for_preview, "last_message_at": now_iso(),
+        "intent": intent, "structure": structure, "agent_id": agent.get("id"),
+        "status": "ai", "language": lang,
+        "tags": new_conv_tags,
+    }
+    if qualification:
+        conv_update["qualification"] = qualification
+
     await db.conversations.update_one(
         {"id": conv_id},
-        {"$set": {
-            "last_message": last_text_for_preview, "last_message_at": now_iso(),
-            "intent": intent, "structure": structure, "agent_id": agent.get("id"),
-            "status": "ai", "language": lang,
-            "tags": list(set((convo.get("tags") or []) + auto_tags)),
-        }, "$inc": {"unread": 1}},
+        {"$set": conv_update, "$inc": {"unread": 1}},
     )
 
     return {

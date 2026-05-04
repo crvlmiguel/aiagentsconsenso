@@ -4,11 +4,22 @@ import { toast } from "sonner";
 import {
   Send, UserCheck, Zap, X, MessageSquare, Instagram,
   Globe, Phone, Tag, ExternalLink, Sparkles, ArrowDown, ArrowLeft,
+  RefreshCw, User, Home, Wallet, BarChart3,
 } from "lucide-react";
 
 const channelIcons = { webchat: Globe, whatsapp: Phone, instagram: Instagram, telegram: Send, messenger: MessageSquare };
 const statusBadge = { ai: "badge-blue", human: "badge-green", closed: "badge-ghost", open: "badge-amber" };
 const statusLabel = { ai: "IA", human: "Humano", closed: "Fechada", open: "Aberta" };
+
+// CRM funnel states (estados do funil)
+const FUNNEL = {
+  novo:              { label: "Novo",              dot: "#5B6B82", bg: "#EEF2F8", fg: "#3D4A63" },
+  qualificando:      { label: "A qualificar",      dot: "#F59E0B", bg: "#FEF3C7", fg: "#92400E" },
+  qualificado:       { label: "Qualificado",       dot: "#0069FE", bg: "#DBEAFE", fg: "#0049B5" },
+  credito_simulado:  { label: "Crédito simulado",  dot: "#7C3AED", bg: "#EDE9FE", fg: "#5B21B6" },
+  visita_agendada:   { label: "Visita agendada",   dot: "#10B981", bg: "#D1FAE5", fg: "#065F46" },
+};
+const funnelOf = (k) => FUNNEL[k] || FUNNEL.novo;
 
 const NEAR_BOTTOM_PX = 120;
 
@@ -28,6 +39,7 @@ const Caixa = () => {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [newMsgPill, setNewMsgPill] = useState(false);
+  const [qualifying, setQualifying] = useState(false);
 
   // Refs
   const msgsContainerRef = useRef(null);
@@ -238,7 +250,20 @@ const Caixa = () => {
     catch { toast.error("Falha"); }
   };
 
+  const refreshQualification = async () => {
+    if (!selectedId || qualifying) return;
+    setQualifying(true);
+    try {
+      const { data } = await api.post(`/conversations/${selectedId}/qualify`);
+      setConversation(prev => prev ? { ...prev, qualification: data.qualification, tags: data.qualification?.tags || [] } : prev);
+      toast.success("Qualificação atualizada.");
+    } catch {
+      toast.error("Falha ao atualizar qualificação.");
+    } finally { setQualifying(false); }
+  };
+
   const intent = conversation?.intent;
+  const qualification = conversation?.qualification;
 
   // Memoize the rendered message list to prevent re-rendering when only the list changes
   const renderedMessages = useMemo(() => (
@@ -379,36 +404,18 @@ const Caixa = () => {
         )}
       </div>
 
-      {/* RIGHT — hidden on mobile/tablet */}
+      {/* RIGHT — CRM Qualification Panel — hidden on mobile/tablet */}
       <div className="border-l border-[#E5EAF2] bg-white overflow-y-auto hidden xl:block" data-testid="caixa-context">
-        <div className="p-5 border-b border-[#E5EAF2]">
-          <div className="label">Contacto</div>
-          <div className="font-display font-semibold text-lg">{conversation?.contact_name || "—"}</div>
-          <div className="text-xs text-[#5B6B82] mt-0.5 uppercase tracking-wider font-semibold">
-            via {conversation?.channel}
-          </div>
-        </div>
-
-        {intent && (
-          <div className="p-5 border-b border-[#E5EAF2]">
-            <div className="label flex items-center gap-1.5"><Sparkles size={12} className="text-[#0069FE]" /> Análise de IA</div>
-            <div className="mt-3 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-[#5B6B82]">Intenção</span><span className="font-semibold text-[#0069FE]">{intent.intent}</span></div>
-              <div className="flex justify-between"><span className="text-[#5B6B82]">Categoria</span><span className="font-semibold">{intent.category}</span></div>
-              <div className="flex justify-between"><span className="text-[#5B6B82]">Urgência</span>
-                <span className={`badge ${intent.urgency === "urgent" ? "badge-red" : intent.urgency === "high" ? "badge-amber" : "badge-ghost"}`}>{intent.urgency}</span>
-              </div>
-              <div className="flex justify-between"><span className="text-[#5B6B82]">Confiança</span><span className="font-semibold">{Math.round((intent.confidence || 0) * 100)}%</span></div>
-            </div>
-          </div>
-        )}
-
-        {conversation?.tags?.length > 0 && (
-          <div className="p-5 border-b border-[#E5EAF2]">
-            <div className="label flex items-center gap-1"><Tag size={12} /> Tags</div>
-            <div className="flex gap-1.5 flex-wrap mt-2">
-              {conversation.tags.map(t => <span key={t} className="badge badge-blue">{t}</span>)}
-            </div>
+        {conversation ? (
+          <CrmPanel
+            conversation={conversation}
+            qualification={qualification}
+            qualifying={qualifying}
+            onRefresh={refreshQualification}
+          />
+        ) : (
+          <div className="p-8 text-center text-sm text-[#5B6B82]">
+            Selecione uma conversa para ver a qualificação.
           </div>
         )}
       </div>
@@ -417,8 +424,121 @@ const Caixa = () => {
 };
 
 // ===== Sub-components (memoized) =====
+const Pending = () => <span className="text-[#9AA6B8] italic">A capturar…</span>;
+
+const CrmPanel = React.memo(function CrmPanel({ conversation, qualification, qualifying, onRefresh }) {
+  const f = funnelOf(qualification?.status);
+  const lead = qualification?.lead || {};
+  const search = qualification?.search || {};
+  return (
+    <div data-testid="crm-panel">
+      {/* Header — contact + channel */}
+      <div className="p-5 border-b border-[#E5EAF2]">
+        <div className="label">Contacto</div>
+        <div className="font-display font-semibold text-lg truncate">{conversation.contact_name || "—"}</div>
+        <div className="text-xs text-[#5B6B82] mt-0.5 uppercase tracking-wider font-semibold">
+          via {conversation.channel}
+        </div>
+      </div>
+
+      {/* Funnel state — primary tag */}
+      <div className="p-5 border-b border-[#E5EAF2]">
+        <div className="flex items-center justify-between mb-2.5">
+          <div className="label flex items-center gap-1.5"><BarChart3 size={12} className="text-[#0069FE]" /> Estado do funil</div>
+          <button data-testid="btn-refresh-qualification" onClick={onRefresh} disabled={qualifying}
+            className="text-[#5B6B82] hover:text-[#0069FE] transition-colors disabled:opacity-40"
+            title="Atualizar qualificação" aria-label="Atualizar qualificação">
+            <RefreshCw size={13} className={qualifying ? "animate-spin" : ""} />
+          </button>
+        </div>
+        <div data-testid="crm-funnel-status"
+          className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full font-bold text-[12px]"
+          style={{ background: f.bg, color: f.fg }}>
+          <span className="w-1.5 h-1.5 rounded-full" style={{ background: f.dot }} />
+          {f.label}
+        </div>
+      </div>
+
+      {/* Conversation summary */}
+      <div className="p-5 border-b border-[#E5EAF2]">
+        <div className="label flex items-center gap-1.5"><Sparkles size={12} className="text-[#0069FE]" /> Resumo</div>
+        <p data-testid="crm-summary" className="mt-2 text-[13px] leading-relaxed text-[#2C3A52]">
+          {qualification?.summary
+            ? qualification.summary
+            : <span className="text-[#9AA6B8] italic">A IA ainda não analisou esta conversa. Clique no ícone ↻ para gerar.</span>}
+        </p>
+      </div>
+
+      {/* Structured qualification */}
+      <div className="p-5 border-b border-[#E5EAF2]">
+        <div className="label">Qualificação CRM</div>
+        <dl className="mt-3 space-y-3 text-[13px]" data-testid="crm-fields">
+          <div>
+            <dt className="flex items-center gap-1.5 text-[#5B6B82] text-[11px] font-semibold uppercase tracking-wider">
+              <User size={11} /> Lead
+            </dt>
+            <dd className="mt-1 text-[#0B1324]" data-testid="crm-lead">
+              <div className="font-semibold">{lead.name || <Pending />}</div>
+              <div className="text-[12px] text-[#5B6B82] truncate">{lead.email || <Pending />}</div>
+            </dd>
+          </div>
+
+          <div>
+            <dt className="flex items-center gap-1.5 text-[#5B6B82] text-[11px] font-semibold uppercase tracking-wider">
+              <Home size={11} /> Procura
+            </dt>
+            <dd className="mt-1 font-medium text-[#0B1324]" data-testid="crm-search">
+              {search.property_type || search.zone ? (
+                <span>
+                  {search.property_type || <Pending />}
+                  {(search.property_type && search.zone) && <span className="text-[#5B6B82]"> em </span>}
+                  {!search.property_type && search.zone && <span className="text-[#5B6B82]">em </span>}
+                  {search.zone || (search.property_type ? "" : <Pending />)}
+                </span>
+              ) : <Pending />}
+            </dd>
+          </div>
+
+          <div>
+            <dt className="flex items-center gap-1.5 text-[#5B6B82] text-[11px] font-semibold uppercase tracking-wider">
+              <Wallet size={11} /> Orçamento
+            </dt>
+            <dd className="mt-1 font-medium text-[#0B1324]" data-testid="crm-budget">
+              {qualification?.budget || <Pending />}
+            </dd>
+          </div>
+
+          <div>
+            <dt className="flex items-center gap-1.5 text-[#5B6B82] text-[11px] font-semibold uppercase tracking-wider">
+              <BarChart3 size={11} /> Perfil
+            </dt>
+            <dd className="mt-1 font-medium text-[#0B1324]" data-testid="crm-profile">
+              {qualification?.profile || <Pending />}
+            </dd>
+          </div>
+        </dl>
+      </div>
+
+      {/* Secondary attribute tags */}
+      {(qualification?.tags?.length || 0) > 0 && (
+        <div className="p-5 border-b border-[#E5EAF2]">
+          <div className="label flex items-center gap-1.5"><Tag size={12} /> Atributos</div>
+          <div className="flex gap-1.5 flex-wrap mt-2.5" data-testid="crm-tags">
+            {qualification.tags.map(t => (
+              <span key={t} className="text-[11px] font-medium px-2 py-0.5 rounded-md border border-[#E5EAF2] text-[#5B6B82] bg-[#F7F9FC]">
+                {t}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+});
+
 const ConvoItem = React.memo(function ConvoItem({ c, isSel, onClick }) {
   const Icon = channelIcons[c.channel] || Globe;
+  const f = c.qualification?.status ? funnelOf(c.qualification.status) : null;
   return (
     <button data-testid={`convo-item-${c.id}`} onClick={onClick}
       className={`w-full text-left border-b border-[#E5EAF2] p-3.5 transition-colors ${isSel ? "bg-[#EAF2FF]" : "hover:bg-[#F7F9FC]"}`}>
@@ -437,11 +557,25 @@ const ConvoItem = React.memo(function ConvoItem({ c, isSel, onClick }) {
         {c.unread > 0 && <span className="text-[#0069FE] font-bold">· {c.unread} nova{c.unread > 1 ? "s" : ""}</span>}
       </div>
       <div className="text-[13px] text-[#2C3A52] mt-1 line-clamp-2">{c.last_message}</div>
-      {c.tags?.length > 0 && (
-        <div className="mt-2 flex gap-1 flex-wrap">
-          {c.tags.slice(0, 3).map(t => <span key={t} className="badge badge-ghost">{t}</span>)}
+
+      {/* Primary funnel tag (replaces generic tag spam) */}
+      {f && (
+        <div className="mt-2 flex items-center gap-1.5">
+          <span data-testid={`convo-funnel-${c.id}`}
+            className="inline-flex items-center gap-1.5 text-[10.5px] font-bold px-2 py-0.5 rounded-full"
+            style={{ background: f.bg, color: f.fg }}>
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: f.dot }} />
+            {f.label}
+          </span>
+          {/* Secondary attribute tags (max 2) */}
+          {(c.qualification?.tags || []).slice(0, 2).map(t => (
+            <span key={t} className="text-[10px] font-medium px-1.5 py-0.5 rounded border border-[#E5EAF2] text-[#5B6B82] bg-white">
+              {t}
+            </span>
+          ))}
         </div>
       )}
+
       {c.action_counts && (c.action_counts.leads > 0 || c.action_counts.tickets > 0) && (
         <div className="mt-2 flex gap-1.5 flex-wrap">
           {c.action_counts.leads > 0 && (

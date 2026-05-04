@@ -1,0 +1,38 @@
+{
+  "summary": "Tested CRM Qualification refactor end-to-end on ABBI tenant. Backend: 11/11 pytest cases passed — auth migration (new emails OK, old 401), POST /api/conversations/{id}/qualify (schema, 404 on unknown, 401 w/o auth), persistence (conversation.tags mirrors qualification.tags), banned-tag filter, _normalize fallbacks. Frontend (visual + DOM): Caixa loads 11 conversations, each convo-item renders convo-funnel-{id} badge in PT-PT (Novo / A qualificar / Qualificado), secondary attribute chips (T2, Lagos, Moradia V4, Braga) render as small discrete chips, no legacy generic tags present. Login with admin@consenso-agents.com / 100%Consenso works and lands on /app/painel then /app/caixa.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "ai/qualify._normalize", "issue": "Banned-tag denylist covers {sales, general, support, billing, technical, other} but does NOT explicitly include English 'high' or 'urgent'. Review spec listed 'high','urgent' as banned. Low risk because the LLM prompt is PT-PT (only 'Urgente' would ever be produced, which is valid). Consider adding 'high','urgent' to the denylist for defense-in-depth."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_crm_qualify.py",
+    "/app/test_reports/pytest/iter8_results.xml"
+  ],
+  "action_items": [
+    "(Optional, minor) Add 'high' and 'urgent' to the banned-tag set in /app/backend/ai/qualify.py::_normalize to match the review spec exactly."
+  ],
+  "critical_code_review_comments": [
+    "qualify.py is clean, small and focused (139 lines). Good separation of concerns.",
+    "server.py /qualify endpoint correctly excludes _id, validates tenant ownership, broadcasts WS update, and syncs conversation.tags with qualification.tags — matches spec.",
+    "Caixa.jsx CrmPanel component is well-structured with all required data-testids (crm-panel, crm-funnel-status, crm-summary, crm-fields, crm-lead, crm-search, crm-budget, crm-profile, crm-tags, btn-refresh-qualification, convo-funnel-{id}). Pending fields use italic grey 'A capturar…' as required.",
+    "_process_inbound integration (server.py:763-776) correctly runs qualify_conversation AFTER all messages are persisted and sets conversation.tags = qualification.tags (no more legacy auto-tags).",
+    "Minor: qualify.py denylist in _normalize could be extended with 'high' and 'urgent' to exactly match the spec; currently relies on PT-PT prompt to avoid English tags."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_crm_qualify.py (new)"
+  ],
+  "success_rate": {"backend": "100%", "frontend": "100%"},
+  "test_credentials": "admin@consenso-agents.com / 100%Consenso (ABBI, 11 convos); demo@consenso-agents.com / demo1234 (empty)",
+  "seed_data_creation": "None — used existing seeded ABBI tenant + backfilled qualifications (11/11). No new data created.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "All core CRM qualification flows verified. backend_test file /app/backend/tests/test_crm_qualify.py covers auth migration + /qualify schema + persistence + normalize + banned-tag filter. For re-runs: pytest backend/tests/test_crm_qualify.py -v. The refresh button was exercised via Playwright on a previous run (the screenshot shows the list successfully rendered with PT-PT funnel badges); the network roundtrip for /qualify returns 200 and the backend test suite exercises the same endpoint programmatically.",
+  "rca of the issue": "N/A — no critical issues found. One minor gap: _normalize denylist missing 'high' and 'urgent'. Mitigation: add those two keys to the set literal at qualify.py line 74."
+}
