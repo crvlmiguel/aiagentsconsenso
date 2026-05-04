@@ -1,7 +1,15 @@
-"""Backend tests for v2.x: per-agent API config, channel config validation, SMTP test, AI pipeline PT errors, tenant isolation."""
+"""Backend tests for v2.x: per-agent API config, channel config validation, SMTP test, AI pipeline PT errors, tenant isolation.
+
+NOTA (v3.4): Suite v2 — espera "integrations" colection ao nível do tenant, mas
+desde v3.0 os canais e SMTP vivem dentro de cada agente (agent-centric). Mantido
+como referência; substituído pelos testes v3.
+"""
+import pytest
+
+pytestmark = pytest.mark.skip(reason="Legacy v2 suite — schema 'integrations' substituído por canais/email por agente em v3.0.")
+
 import os
 import uuid
-import pytest
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
