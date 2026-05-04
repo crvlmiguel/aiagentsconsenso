@@ -20,7 +20,7 @@ if not BASE_URL:
 BASE_URL = BASE_URL.rstrip("/")
 API = f"{BASE_URL}/api"
 
-DEMO_EMAIL = "demo@consenso.plus"
+DEMO_EMAIL = "demo@consenso-agents.com"
 DEMO_PASSWORD = "demo1234"
 
 

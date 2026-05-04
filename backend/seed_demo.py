@@ -1,6 +1,6 @@
-"""Seed para o tenant de DEMONSTRAÇÃO (admin@consensoplus.com).
+"""Seed para o tenant de DEMONSTRAÇÃO (admin@consenso-agents.com).
 Popula com dados realistas PT-PT de uma imobiliária.
-Não toca no tenant principal (demo@consenso.plus)."""
+Não toca no tenant principal (demo@consenso-agents.com)."""
 import os
 import asyncio
 from datetime import datetime, timezone, timedelta
@@ -15,7 +15,7 @@ load_dotenv(Path(__file__).parent / ".env")
 MONGO_URL = os.environ["MONGO_URL"]
 DB_NAME = os.environ["DB_NAME"]
 
-ADMIN_EMAIL = "admin@consensoplus.com"
+ADMIN_EMAIL = "admin@consenso-agents.com"
 ADMIN_PASSWORD = "100%Consenso"
 
 

@@ -1,7 +1,34 @@
-# Consenso Plus — PRD (v3.3)
+# Consenso Plus — PRD (v3.4)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+
+**Domínio oficial**: `consenso-agents.com`
+
+## v3.4 (2026-02 · sessão atual) — Limpeza global de domínio antigo
+
+### Migração de domínio (P0 · concluído)
+- Varredura global feita em todo o codebase (frontend + backend + configs + scripts)
+- Removidas/migradas todas as referências aos domínios antigos `consenso.plus` e `consensoplus.com` para `consenso-agents.com`
+- **User-Agent backend** (`ai/retrieval.py`): `https://consenso.plus` → `https://consenso-agents.com`
+- **Email admin tenant limpo** (`seed.py` + DB): `demo@consenso.plus` → `demo@consenso-agents.com`
+- **Email admin tenant ABBI** (`seed_abbi.py`/`seed_demo.py` + DB): `admin@consensoplus.com` → `admin@consenso-agents.com`
+- **Migração da BD**: `backend/migrate_emails.py` (idempotente) renomeia utilizadores existentes — executado com sucesso (matched=1/mod=1 em ambos)
+- **Testes backend**: emails atualizados em todos os ficheiros sob `backend/tests/`
+- **Test credentials**: `/app/memory/test_credentials.md` atualizado com novos emails
+
+### Verificação (smoke test final)
+- [x] Login `demo@consenso-agents.com` / `demo1234` retorna token JWT
+- [x] Login `admin@consenso-agents.com` / `100%Consenso` retorna token JWT
+- [x] Login com email antigo (`demo@consenso.plus`) é corretamente recusado (401 "Credenciais inválidas")
+- [x] `grep` final em código fonte: **ZERO referências** a `consenso.plus`, `consensoplus.com`, `business-os-hub` ou `preview.emergentagent.com`
+- [x] Backend `/api/` health: `{"name":"Consenso Plus","version":"2.3.0","status":"ok"}`
+- [x] Página de login renderiza limpa em PT-PT
+
+### Mantidos (intencional)
+- Marca "Consenso+" / "Consenso Plus" — é o nome do produto, não o domínio
+- `frontend/.env` `REACT_APP_BACKEND_URL` — variável protegida, sobrescrita pela plataforma no deploy
+- Scripts `assets.emergent.sh` e PostHog em `index.html` — geridos pela plataforma
 
 ## v3.3 (2026-05-03) — Webhooks reais + lazy-load Inbox
 

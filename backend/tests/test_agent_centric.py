@@ -12,7 +12,7 @@ API = f"{BASE_URL}/api"
 def auth():
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
-    r = s.post(f"{API}/auth/login", json={"email": "demo@consenso.plus", "password": "demo1234"})
+    r = s.post(f"{API}/auth/login", json={"email": "demo@consenso-agents.com", "password": "demo1234"})
     assert r.status_code == 200, r.text
     j = r.json()
     s.headers.update({"Authorization": f"Bearer {j['token']}"})

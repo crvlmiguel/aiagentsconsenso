@@ -29,7 +29,7 @@ def _chunk(text: str, size: int = 800) -> List[str]:
 
 def scrape_url(url: str, max_pages: int = 1) -> Dict[str, Any]:
     """Scrape a URL. Returns {title, text, items: [{title, price, image, link, description}]}"""
-    headers = {"User-Agent": "ConsensoPlus/1.0 (+https://consenso.plus)"}
+    headers = {"User-Agent": "ConsensoPlus/1.0 (+https://consenso-agents.com)"}
     r = requests.get(url, headers=headers, timeout=15)
     r.raise_for_status()
     soup = BeautifulSoup(r.text, "lxml")

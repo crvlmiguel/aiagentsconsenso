@@ -10,7 +10,7 @@ assert BASE_URL, "REACT_APP_BACKEND_URL missing"
 
 TENANT_ID = "896e44e0-98b9-4172-8841-32419fe495b7"
 AGENT_ID = "b7e15638-e0d7-4df2-8d33-1f3ee3a5f04f"
-EMAIL = "demo@consenso.plus"
+EMAIL = "demo@consenso-agents.com"
 PASSWORD = "demo1234"
 
 WA_VERIFY_TOKEN = "iter7-verify-secret"

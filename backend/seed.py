@@ -24,7 +24,7 @@ async def seed():
     client = AsyncIOMotorClient(MONGO_URL)
     db = client[DB_NAME]
 
-    existing = await db.users.find_one({"email": "demo@consenso.plus"}, {"_id": 0})
+    existing = await db.users.find_one({"email": "demo@consenso-agents.com"}, {"_id": 0})
     if existing:
         print("Conta inicial já existe.")
         return
@@ -41,7 +41,7 @@ async def seed():
 
     await db.users.insert_one({
         "id": user_id, "tenant_id": tenant_id,
-        "email": "demo@consenso.plus", "name": "Administrador",
+        "email": "demo@consenso-agents.com", "name": "Administrador",
         "role": "owner",
         "password_hash": hash_password("demo1234"),
         "created_at": _now(),

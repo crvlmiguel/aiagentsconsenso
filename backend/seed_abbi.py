@@ -1,5 +1,5 @@
 """Seed do agente ABBI — Assistente Imobiliário.
-Cria um novo agente dedicado no tenant demo (admin@consensoplus.com)
+Cria um novo agente dedicado no tenant demo (admin@consenso-agents.com)
 com 9 imóveis reais extraídos de https://abbimoveis.com/imovel/
 """
 import os
@@ -12,7 +12,7 @@ from pathlib import Path
 
 load_dotenv(Path(__file__).parent / ".env")
 
-ADMIN_EMAIL = "admin@consensoplus.com"
+ADMIN_EMAIL = "admin@consenso-agents.com"
 
 # 9 imóveis reais extraídos de https://abbimoveis.com/imovel/
 PROPERTIES = [

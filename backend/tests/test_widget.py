@@ -10,7 +10,7 @@ def _read_frontend_env():
     raise RuntimeError("REACT_APP_BACKEND_URL not set")
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or _read_frontend_env()).rstrip("/")
-DEMO_EMAIL = "demo@consenso.plus"
+DEMO_EMAIL = "demo@consenso-agents.com"
 DEMO_PASS = "demo1234"
 DEMO_TENANT = "896e44e0-98b9-4172-8841-32419fe495b7"
 DEMO_AGENT = "b7e15638-e0d7-4df2-8d33-1f3ee3a5f04f"
