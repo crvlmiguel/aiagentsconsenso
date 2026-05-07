@@ -1426,3 +1426,11 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 @app.on_event("shutdown")
 async def _shutdown():
     client.close()
+
+
+@app.on_event("startup")
+async def _startup_bootstrap():
+    """Auto-provision admin user + 3 agents on a fresh production DB.
+    Idempotent — does nothing if data already exists."""
+    from bootstrap import bootstrap
+    await bootstrap(db)
