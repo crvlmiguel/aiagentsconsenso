@@ -249,7 +249,14 @@ async def seed():
     await db.agents.insert_one({
         "id": agent_id, "tenant_id": tenant_id,
         "name": "Abby — ABBI Imóveis",
-        "avatar_url": "",
+        "avatar_url": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=200&h=200&fit=crop",
+        "theme": {
+            "primary": "#c9a84d",
+            "primary_dark": "#a88838",
+            "primary_soft": "#FAF4E2",
+            "primary_border": "#E8D8A8",
+            "bot": "#4e7bfa",
+        },
         "welcome_message": "Olá! Como posso ajudar hoje?",
         "icebreakers": [
             "🏠 Comprar e simular prestação",
