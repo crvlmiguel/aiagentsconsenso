@@ -1024,6 +1024,7 @@ async def public_agent(tenant_id: str, agent_id: Optional[str] = None):
             "tenant_name": tenant.get("name"),
             "name": "Assistente", "avatar_url": "", "welcome_message": "Olá! Como posso ajudar?",
             "icebreakers": [], "language": tenant.get("default_language", "pt"),
+            "theme": {},
         }
     return {
         "agent_id": agent["id"], "tenant_name": tenant.get("name"),
@@ -1032,6 +1033,7 @@ async def public_agent(tenant_id: str, agent_id: Optional[str] = None):
         "welcome_message": agent.get("welcome_message") or "Olá! Como posso ajudar?",
         "icebreakers": agent.get("icebreakers") or [],
         "language": agent.get("default_language", "pt"),
+        "theme": agent.get("theme") or {},
     }
 
 
