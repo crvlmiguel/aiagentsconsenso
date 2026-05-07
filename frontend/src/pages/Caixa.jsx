@@ -271,9 +271,9 @@ const Caixa = () => {
   ), [messages]);
 
   return (
-    <div className="h-full grid grid-cols-1 md:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr_320px]" data-testid="caixa-root">
+    <div className="h-full min-h-0 flex md:grid md:grid-cols-[300px_1fr] xl:grid-cols-[340px_1fr_320px]" data-testid="caixa-root">
       {/* LEFT list — hidden on mobile when a conversation is open */}
-      <div className={`border-r border-[#E5EAF2] bg-white flex-col h-full ${selectedId ? "hidden md:flex" : "flex"}`}
+      <div className={`border-r border-[#E5EAF2] bg-white flex-col flex-1 min-h-0 md:flex-none md:h-full ${selectedId ? "hidden md:flex" : "flex"}`}
         data-testid="caixa-list">
         <div className="p-4 border-b border-[#E5EAF2]">
           <div className="flex items-center justify-between">
@@ -317,7 +317,7 @@ const Caixa = () => {
       </div>
 
       {/* CENTER */}
-      <div className={`flex flex-col h-full bg-[#F7F9FC] relative min-h-0 ${selectedId ? "flex" : "hidden md:flex"}`}
+      <div className={`flex-col bg-[#F7F9FC] relative flex-1 min-h-0 md:flex-none md:h-full ${selectedId ? "flex" : "hidden md:flex"}`}
         data-testid="caixa-thread">
         {!conversation && !loadingThread && (
           <div className="flex-1 flex items-center justify-center text-[#5B6B82] text-sm">
@@ -405,7 +405,7 @@ const Caixa = () => {
       </div>
 
       {/* RIGHT — CRM Qualification Panel — hidden on mobile/tablet */}
-      <div className="border-l border-[#E5EAF2] bg-white overflow-y-auto hidden xl:block" data-testid="caixa-context">
+      <div className="border-l border-[#E5EAF2] bg-white overflow-y-auto hidden xl:block xl:h-full" data-testid="caixa-context">
         {conversation ? (
           <CrmPanel
             conversation={conversation}
