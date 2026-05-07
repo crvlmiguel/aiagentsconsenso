@@ -35,14 +35,19 @@ async def _ensure_admin(db) -> str:
 
     tenant_id = str(uuid.uuid4())
     await db.tenants.insert_one({
-        "id": tenant_id, "name": TENANT_NAME,
-        "default_language": "pt", "created_at": _now(),
+        "id": tenant_id,
+        "name": TENANT_NAME,
+        "slug": "consenso",
+        "plan": "pro",
+        "default_language": "pt",
+        "created_at": _now(),
     })
     await db.users.insert_one({
         "id": str(uuid.uuid4()), "tenant_id": tenant_id,
         "email": ADMIN_EMAIL, "name": "Administrador",
         "password_hash": hash_password(ADMIN_PASSWORD),
-        "role": "admin", "created_at": _now(),
+        "role": "owner",
+        "created_at": _now(),
     })
     logger.info(f"[bootstrap] created admin user + tenant '{TENANT_NAME}' ({tenant_id[:8]}…)")
     return tenant_id

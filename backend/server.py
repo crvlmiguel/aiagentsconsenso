@@ -140,6 +140,21 @@ async def login(inp: LoginInput):
     if not user or not verify_password(inp.password, user.get("password_hash", "")):
         raise HTTPException(401, "Credenciais inválidas")
     tenant = await db.tenants.find_one({"id": user["tenant_id"]}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(500, "Tenant não encontrado")
+    # Defensive: backfill missing fields on legacy/incomplete tenant docs so
+    # Pydantic response model never raises a ValidationError → 500.
+    backfill = {}
+    if not tenant.get("slug"):
+        backfill["slug"] = (tenant.get("name") or "tenant").lower().replace(" ", "-")[:32]
+    if not tenant.get("plan"):
+        backfill["plan"] = "pro"
+    if backfill:
+        await db.tenants.update_one({"id": tenant["id"]}, {"$set": backfill})
+        tenant.update(backfill)
+    if user.get("role") not in {"owner", "admin", "agent", "platform_admin"}:
+        await db.users.update_one({"id": user["id"]}, {"$set": {"role": "owner"}})
+        user["role"] = "owner"
     token = create_token(user["id"], user["tenant_id"], user.get("role", "owner"))
     user_clean = {k: v for k, v in user.items() if k != "password_hash"}
     return AuthResponse(token=token, user=User(**user_clean), tenant=Tenant(**tenant))
