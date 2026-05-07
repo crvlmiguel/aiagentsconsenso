@@ -771,11 +771,11 @@ const Agentes = () => {
                   <div className="card-surface p-6">
                     <div className="flex items-center justify-between mb-3">
                       <div>
-                        <div className="font-display font-semibold">Testar em página real</div>
-                        <p className="text-xs text-[#5B6B82] mt-0.5">Abre uma página externa que carrega o script tal como o seu cliente verá.</p>
+                        <div className="font-display font-semibold">Demonstração ao vivo</div>
+                        <p className="text-xs text-[#5B6B82] mt-0.5">Página profissional pronta a partilhar com clientes — mostra o agente em ação.</p>
                       </div>
                       <a data-testid="btn-test-real-page" href={testPageUrl} target="_blank" rel="noreferrer" className="btn-primary text-[12px]">
-                        <Zap size={11} /> Abrir página de teste
+                        <Zap size={11} /> Abrir demonstração
                       </a>
                     </div>
                   </div>

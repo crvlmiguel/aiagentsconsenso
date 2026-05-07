@@ -1142,61 +1142,265 @@ async def brand_icon():
 
 @api.get("/widget-test/{tenant_id}/{agent_id}", response_class=HTMLResponse)
 async def widget_test_page(tenant_id: str, agent_id: str, request: Request):
-    """Demo page that loads widget.js as an external site would — for real-world testing."""
-    # Derive public URL from forwarded headers so the displayed snippet matches what the user will paste
+    """Public demo page — clean, professional, ready to share with clients.
+    Loads the agent's actual config (name, avatar, theme, role) and embeds the live widget."""
+    # Derive public URL from forwarded headers — works in any deployment
     host = request.headers.get("x-forwarded-host") or request.headers.get("host") or "localhost"
     proto = request.headers.get("x-forwarded-proto") or ("https" if request.url.scheme == "https" else "http")
     backend = f"{proto}://{host}"
-    # Use relative /api/widget.js so it works regardless of deployment
+
+    # Fetch the agent + tenant for personalisation (graceful fallback)
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": tenant_id}, {"_id": 0}) or {}
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0}) or {}
+
+    name = agent.get("name") or "Assistente IA"
+    role = agent.get("role") or "Assistente digital"
+    avatar = agent.get("avatar_url") or ""
+    welcome = agent.get("welcome_message") or "Olá! Como posso ajudar hoje?"
+    goal = agent.get("goal") or "Apoiar clientes em tempo real, qualificar pedidos e encaminhar para a equipa."
+    tenant_name = tenant.get("name") or "Consenso"
+
+    theme = agent.get("theme") or {}
+    primary = theme.get("primary") or "#0069FE"
+    primary_dark = theme.get("primary_dark") or "#003F99"
+    primary_soft = theme.get("primary_soft") or "#EAF2FF"
+    bot_color = theme.get("bot") or primary
+
+    # Capabilities derived from tools + sensible defaults
+    tool_keys = {(t.get("key") if isinstance(t, dict) else t) for t in (agent.get("tools") or [])}
+    has_lead = "create_lead" in tool_keys
+    has_ticket = "create_ticket" in tool_keys
+
+    capabilities = [
+        ("💬", "Atendimento natural 24/7",
+         "Responde a qualquer hora em linguagem humana, sem guiões rígidos."),
+        ("🎯", "Qualifica e organiza pedidos" if has_lead else "Compreende a intenção do cliente",
+         "Capta nome, email e contexto naturalmente, pronto para a equipa dar seguimento."
+         if has_lead else "Identifica o que o cliente procura e adapta a resposta ao contexto."),
+        ("🌍", "Multilingue automático",
+         "Detecta o idioma e responde em PT, EN, ES, FR, IT, DE — sem configuração extra."),
+        ("⚡", "Respostas em segundos",
+         "Não há espera nem formulários. O cliente fala, o agente responde."),
+    ]
+    if has_ticket:
+        capabilities.append((
+            "🎫", "Cria tickets de apoio",
+            "Quando o pedido exige um humano, cria automaticamente um ticket com o histórico."
+        ))
+
+    cap_html = "".join(
+        f'<div class="cap"><div class="cap-ic">{ic}</div>'
+        f'<div><h3>{t}</h3><p>{d}</p></div></div>'
+        for ic, t, d in capabilities
+    )
+
+    avatar_html = (
+        f'<img src="{avatar}" alt="{name}" />'
+        if avatar
+        else f'<span>{name[:2].upper()}</span>'
+    )
+
     html = f"""<!doctype html>
 <html lang="pt">
 <head>
 <meta charset="utf-8">
-<title>Consenso+ · Página de teste</title>
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+<title>{name} · Demonstração ao vivo</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="description" content="{role} · {tenant_name}. Demonstração funcional do agente IA.">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
-*{{box-sizing:border-box}}body{{margin:0;font-family:Inter,system-ui,sans-serif;color:#0B1324;background:linear-gradient(180deg,#F7F9FC 0%,#EAF2FF 100%);min-height:100vh}}
-.wrap{{max-width:780px;margin:0 auto;padding:60px 24px}}
-.badge{{display:inline-block;background:#0069FE;color:#fff;padding:4px 12px;border-radius:999px;font-size:11px;font-weight:600;letter-spacing:.08em;text-transform:uppercase}}
-h1{{font-size:40px;font-weight:700;letter-spacing:-.02em;margin:16px 0 8px}}
-p{{color:#5B6B82;font-size:16px;line-height:1.6;margin:0 0 12px}}
-.card{{background:#fff;border:1px solid #E5EAF2;border-radius:16px;padding:28px;margin-top:32px;box-shadow:0 2px 10px rgba(11,19,36,.04)}}
-.card h2{{font-size:18px;margin:0 0 8px}}
-.arrow{{position:fixed;bottom:100px;right:28px;background:#0B1324;color:#fff;padding:10px 16px;border-radius:12px;font-size:13px;font-weight:600;animation:b 1.2s infinite}}
-.arrow::after{{content:"";position:absolute;bottom:-7px;right:25px;width:0;height:0;border:8px solid transparent;border-top-color:#0B1324;border-bottom:0}}
-@keyframes b{{0%,100%{{transform:translateY(0)}}50%{{transform:translateY(-4px)}}}}
-code{{background:#F7F9FC;padding:2px 6px;border-radius:4px;font-size:13px;color:#0069FE}}
+*{{box-sizing:border-box}}
+html,body{{margin:0;padding:0}}
+body{{font-family:Inter,system-ui,-apple-system,sans-serif;color:#0B1324;
+background:#FAFBFC;line-height:1.55;-webkit-font-smoothing:antialiased}}
+
+/* Brand variables (agent-driven) */
+:root{{
+  --brand:{primary};
+  --brand-dark:{primary_dark};
+  --brand-soft:{primary_soft};
+  --bot:{bot_color};
+}}
+
+/* Top bar */
+.topbar{{padding:18px 32px;display:flex;align-items:center;justify-content:space-between;
+border-bottom:1px solid #EEF1F5;background:#fff;position:sticky;top:0;z-index:10;backdrop-filter:saturate(180%) blur(8px)}}
+.topbar .brand{{font-weight:700;letter-spacing:-.01em;color:#0B1324;text-decoration:none;font-size:15px}}
+.topbar .brand span{{color:var(--brand)}}
+.topbar .right{{font-size:13px;color:#5B6B82}}
+.topbar .right a{{color:var(--brand);font-weight:600;text-decoration:none}}
+
+/* Hero */
+.hero{{padding:80px 24px 60px;text-align:center;
+background:radial-gradient(ellipse at 50% 0%,var(--brand-soft) 0%,transparent 60%)}}
+.hero-inner{{max-width:780px;margin:0 auto}}
+.av{{width:96px;height:96px;border-radius:50%;margin:0 auto 24px;
+background:linear-gradient(135deg,var(--brand) 0%,var(--brand-dark) 100%);
+display:flex;align-items:center;justify-content:center;color:#fff;
+font-weight:700;font-size:32px;overflow:hidden;
+box-shadow:0 12px 40px -8px rgba(11,19,36,.18),0 0 0 8px rgba(255,255,255,.7)}}
+.av img{{width:100%;height:100%;object-fit:cover}}
+.online{{display:inline-flex;align-items:center;gap:6px;font-size:12px;
+font-weight:600;color:#0F8A4D;background:#E6FAEE;padding:5px 11px;
+border-radius:999px;margin-bottom:18px}}
+.online::before{{content:"";width:7px;height:7px;background:#0F8A4D;
+border-radius:50%;box-shadow:0 0 0 0 rgba(15,138,77,.6);animation:pulse 1.6s infinite}}
+@keyframes pulse{{0%{{box-shadow:0 0 0 0 rgba(15,138,77,.5)}}70%{{box-shadow:0 0 0 8px rgba(15,138,77,0)}}100%{{box-shadow:0 0 0 0 rgba(15,138,77,0)}}}}
+h1{{font-size:48px;font-weight:800;letter-spacing:-.025em;margin:0 0 14px;line-height:1.1}}
+.hero p.role{{font-size:18px;color:#3D4A63;margin:0 0 6px;font-weight:500}}
+.hero p.welcome{{font-size:17px;color:#5B6B82;max-width:560px;margin:14px auto 0}}
+
+/* Sections */
+section{{padding:64px 24px}}
+.container{{max-width:1080px;margin:0 auto}}
+h2{{font-size:30px;font-weight:700;letter-spacing:-.02em;margin:0 0 12px;text-align:center}}
+.sub{{font-size:15px;color:#5B6B82;text-align:center;margin:0 auto 44px;max-width:600px}}
+
+/* What it does — intro card */
+.intro{{background:#fff;border:1px solid #EEF1F5;border-radius:20px;
+padding:36px;display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start;
+box-shadow:0 2px 8px rgba(11,19,36,.03)}}
+.intro-ic{{width:52px;height:52px;border-radius:14px;background:var(--brand-soft);
+color:var(--brand);display:flex;align-items:center;justify-content:center;font-size:24px;flex-shrink:0}}
+.intro h3{{margin:0 0 6px;font-size:18px;font-weight:700}}
+.intro p{{margin:0;color:#3D4A63;font-size:15px}}
+@media(max-width:600px){{.intro{{grid-template-columns:1fr;text-align:center}}.intro-ic{{margin:0 auto}}}}
+
+/* Capabilities */
+.caps{{display:grid;grid-template-columns:repeat(2,1fr);gap:20px;margin-top:8px}}
+@media(max-width:720px){{.caps{{grid-template-columns:1fr}}}}
+.cap{{background:#fff;border:1px solid #EEF1F5;border-radius:16px;padding:24px;
+display:flex;gap:16px;align-items:flex-start;transition:all .2s}}
+.cap:hover{{transform:translateY(-2px);box-shadow:0 12px 24px -8px rgba(11,19,36,.08);
+border-color:var(--brand-soft)}}
+.cap-ic{{font-size:28px;flex-shrink:0;width:48px;height:48px;background:var(--brand-soft);
+border-radius:12px;display:flex;align-items:center;justify-content:center}}
+.cap h3{{margin:0 0 4px;font-size:16px;font-weight:700}}
+.cap p{{margin:0;color:#5B6B82;font-size:14px}}
+
+/* Try it */
+.tryit{{background:linear-gradient(135deg,var(--brand) 0%,var(--brand-dark) 100%);
+border-radius:24px;padding:60px 32px;text-align:center;color:#fff;position:relative;overflow:hidden}}
+.tryit::after{{content:"";position:absolute;inset:0;background:radial-gradient(circle at 80% 20%,rgba(255,255,255,.12) 1px,transparent 1px);background-size:32px 32px;pointer-events:none}}
+.tryit h2{{color:#fff}}
+.tryit .sub{{color:rgba(255,255,255,.85)}}
+.tryit-cta{{position:relative;display:inline-flex;align-items:center;gap:8px;
+background:#fff;color:var(--brand);font-weight:700;font-size:15px;
+padding:14px 26px;border-radius:14px;cursor:pointer;border:0;
+box-shadow:0 8px 24px -4px rgba(0,0,0,.2);transition:all .15s}}
+.tryit-cta:hover{{transform:translateY(-1px);box-shadow:0 12px 28px -4px rgba(0,0,0,.25)}}
+
+/* Value */
+.value{{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;margin-top:8px}}
+@media(max-width:720px){{.value{{grid-template-columns:repeat(2,1fr)}}}}
+@media(max-width:420px){{.value{{grid-template-columns:1fr}}}}
+.metric{{text-align:center;padding:28px 16px;background:#fff;border-radius:16px;border:1px solid #EEF1F5}}
+.metric .num{{font-size:32px;font-weight:800;color:var(--brand);letter-spacing:-.02em;line-height:1}}
+.metric .lbl{{font-size:13px;color:#5B6B82;margin-top:8px;font-weight:500}}
+
+/* Footer */
+footer{{padding:40px 24px;text-align:center;color:#9AA6B8;font-size:13px;border-top:1px solid #EEF1F5;background:#fff}}
+footer a{{color:var(--brand);text-decoration:none;font-weight:600}}
+
+/* Floating "try chat" bubble hint (only on first load) */
+.hint{{position:fixed;bottom:96px;right:24px;background:#0B1324;color:#fff;
+padding:10px 14px;border-radius:12px;font-size:13px;font-weight:500;
+animation:slideIn .4s ease,fadeOut .4s ease 6s forwards;z-index:50;
+box-shadow:0 12px 32px -4px rgba(0,0,0,.25)}}
+.hint::after{{content:"";position:absolute;bottom:-6px;right:22px;
+width:0;height:0;border:7px solid transparent;border-top-color:#0B1324;border-bottom:0}}
+@keyframes slideIn{{from{{opacity:0;transform:translateY(8px)}}to{{opacity:1;transform:translateY(0)}}}}
+@keyframes fadeOut{{to{{opacity:0;transform:translateY(8px);visibility:hidden}}}}
 </style>
 </head>
 <body>
-<div class="wrap">
-<span class="badge">Página de teste</span>
-<h1>O seu chatbot em ação</h1>
-<p>Esta é uma página de teste que carrega o mesmo script que o seu cliente vai colar no site dele.</p>
-<p>Deverá ver o <b>ícone azul flutuante</b> no canto inferior direito. Clique para abrir o chat.</p>
 
-<div class="card">
-<h2>Script instalado</h2>
-<p style="font-family:monospace;font-size:12px;background:#F7F9FC;padding:12px;border-radius:8px;white-space:pre-wrap;color:#0B1324">&lt;script src="{backend}/api/widget.js"
-  data-tenant-id="{tenant_id}"
-  data-agent-id="{agent_id}"
-  defer&gt;&lt;/script&gt;</p>
+<div class="topbar">
+  <a class="brand" href="/">Consenso<span>+</span></a>
+  <div class="right">Demonstração ao vivo · <a href="https://consenso-shop.eu" target="_blank">Falar com a equipa</a></div>
 </div>
 
-<div class="card">
-<h2>Como testar</h2>
-<p>1. Verifique que o ícone azul apareceu no canto inferior direito.</p>
-<p>2. Clique no ícone — deve abrir a janela de chat.</p>
-<p>3. Escreva uma mensagem de cliente (ex: <code>Olá, tenho uma questão</code>).</p>
-<p>4. A IA responde com o agente configurado.</p>
+<div class="hero">
+  <div class="hero-inner">
+    <div class="av">{avatar_html}</div>
+    <div class="online">Ativo · Online agora</div>
+    <h1>{name}</h1>
+    <p class="role">{role} · {tenant_name}</p>
+    <p class="welcome">{welcome}</p>
+  </div>
 </div>
-</div>
-<div class="arrow">O ícone aparece aqui ↓</div>
+
+<section>
+  <div class="container">
+    <div class="intro">
+      <div class="intro-ic">✨</div>
+      <div>
+        <h3>O que faz por si</h3>
+        <p>{goal}</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background:#fff;border-top:1px solid #EEF1F5;border-bottom:1px solid #EEF1F5">
+  <div class="container">
+    <h2>Capacidades</h2>
+    <p class="sub">Tudo o que este agente pode fazer para os seus clientes — em tempo real.</p>
+    <div class="caps">{cap_html}</div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <h2>Resultados que entrega</h2>
+    <p class="sub">Disponibilidade total, qualificação automática e zero tempo de espera.</p>
+    <div class="value">
+      <div class="metric"><div class="num">24/7</div><div class="lbl">Disponibilidade total</div></div>
+      <div class="metric"><div class="num">&lt;5s</div><div class="lbl">Tempo de resposta</div></div>
+      <div class="metric"><div class="num">6+</div><div class="lbl">Idiomas suportados</div></div>
+      <div class="metric"><div class="num">0€</div><div class="lbl">Em horas extra</div></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="container">
+    <div class="tryit">
+      <h2>Experimente agora</h2>
+      <p class="sub">Carregue no botão para abrir o chat e fale diretamente com o {name.split(' ')[0]}.</p>
+      <button class="tryit-cta" onclick="window.__cp_open && window.__cp_open()">
+        💬 Falar com o agente
+      </button>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Powered by <a href="https://consenso-agents.com" target="_blank">Consenso+</a> · Plataforma de agentes IA para empresas
+</footer>
+
+<div class="hint">Carregue aqui para falar com o agente ↓</div>
+
 <script src="/api/widget.js" data-tenant-id="{tenant_id}" data-agent-id="{agent_id}" defer></script>
+<script>
+// Expose a helper to open the widget bubble from the CTA button
+window.addEventListener("load", function(){{
+  setTimeout(function(){{
+    window.__cp_open = function(){{
+      var btn = document.getElementById("cp-launcher");
+      if (btn) btn.click();
+    }};
+    // Auto-hide hint after 6s
+    setTimeout(function(){{
+      var h = document.querySelector(".hint");
+      if (h) h.style.display = "none";
+    }}, 6500);
+  }}, 800);
+}});
+</script>
 </body>
 </html>"""
-    return HTMLResponse(html)
+    return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300"})
 
 
 # ======================== ROOT ========================
