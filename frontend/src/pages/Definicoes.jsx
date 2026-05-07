@@ -6,7 +6,8 @@ import { Copy } from "lucide-react";
 const Definicoes = () => {
   const { user, tenant } = useAuth();
   const [copied, setCopied] = useState("");
-  const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+  // Use window.location.origin so the public endpoint shown matches the user's domain
+  const API = `${(typeof window !== "undefined" && window.location?.origin) || process.env.REACT_APP_BACKEND_URL}/api`;
 
   const copy = (k, t) => {
     navigator.clipboard.writeText(t); setCopied(k); toast.success("Copiado");

@@ -190,7 +190,12 @@ const Agentes = () => {
     setTimeout(() => setCopied(""), 1500);
   };
 
-  const backendUrl = process.env.REACT_APP_BACKEND_URL;
+  // Use window.location.origin so the snippets always reflect the domain where the user
+  // is currently authenticated (e.g. consenso-agents.com) — not the build-time
+  // REACT_APP_BACKEND_URL which can be the platform-internal host.
+  const backendUrl = (typeof window !== "undefined" && window.location?.origin)
+    ? window.location.origin
+    : process.env.REACT_APP_BACKEND_URL;
   const scriptSnippet = selected?.id
     ? `<!-- Consenso+ Chatbot -->\n<script src="${backendUrl}/api/widget.js"\n  data-tenant-id="${selected.tenant_id}"\n  data-agent-id="${selected.id}"\n  defer></script>`
     : "";
