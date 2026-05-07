@@ -31,7 +31,7 @@ async def structure_message(text: str, channel: str, session_id: str, api_provid
         system_message=STRUCTURE_SYSTEM,
         user_text=f"Channel: {channel}\nMessage: {text}",
         session_id=f"structure-{session_id}",
-        task="reasoning",
+        task="fast",
         api_provider=api_provider,
         api_key=api_key,
     )

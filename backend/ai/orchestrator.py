@@ -100,46 +100,38 @@ async def generate_response(
 
     reply_lang = language or default_lang
 
+    # Pre-build cards from retrieved items — saves the LLM ~500-800 output tokens
+    # (which translates to ~2-3 seconds on gemini-flash). The LLM only needs to
+    # decide WHICH items match (by referring to them by index) and produce the reply.
+    server_cards = _retrieved_to_cards(retrieved, limit=4)
+    items_summary = ""
+    if server_cards:
+        lines = []
+        for i, c in enumerate(server_cards, 1):
+            lines.append(f"[{i}] {c['title']} | {c.get('price','')} | {c.get('description','')[:100]}")
+        items_summary = "\n".join(lines)
+
     system = f"""{base_prompt}
 
 Tom: {tone}.
 Objetivo: {agent.get('goal', 'Ajudar o cliente')}.
-Regras: {rules or 'Sê conciso. Sê honesto. Oferece transferir para humano em casos complexos.'}
+Regras: {rules or 'Sê conciso. Sê honesto.'}
 
-Conhecimento do negócio (sempre fiável):
-{knowledge or '(sem base de conhecimento adicional)'}
+{f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
+{f"Conhecimento adicional: {knowledge}" if knowledge else ""}
 
-Dados recuperados das fontes do tenant:
-{_format_context(retrieved)}
+INSTRUÇÕES (CRÍTICO):
+- IDIOMA: responde no mesmo idioma do cliente (detectado: {reply_lang}; se pt → pt-PT, NUNCA pt-BR).
+- FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
+- MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão. Sem parágrafos.
+- "use_items" é uma lista com os números [1..N] dos imóveis que queres mostrar como cards. Lista vazia [] se nenhum encaixa.
+- NÃO copies título/preço/link no reply — eles aparecem nos cards automaticamente.
+- "reply" e "follow_up" devem ser conversacionais, NUNCA listas de imóveis.
 
-Análise da última mensagem:
-- Intenção: {intent.get('intent')} | Categoria: {intent.get('category')} | Urgência: {intent.get('urgency')}
-- Tipo estruturado: {structure.get('type')} | Domínio: {structure.get('domain')} | Prioridade: {structure.get('priority')}
-- Necessidades: {', '.join(structure.get('needs', [])) or 'n/a'}
-
-INSTRUÇÕES DE RESPOSTA (CRÍTICO, OBRIGATÓRIO):
-- IDIOMA: Responde SEMPRE no MESMO IDIOMA em que o cliente te escreveu (detectado: {reply_lang}). Se pt → Português Europeu (pt-PT, NUNCA pt-BR). Se en → Inglês. Se es → Espanhol. Se fr → Francês. Se de → Alemão. Se it → Italiano. Mantém o tom profissional, amigável e consultivo em qualquer idioma.
-- FORMATO DA RESPOSTA: APENAS JSON válido neste formato EXATO:
-  {{"reply": "mensagem 1", "follow_up": "mensagem 2 (opcional)", "cards": [{{"title": "...", "price": "...", "image": "https://...", "link": "https://...", "description": "..."}}]}}
-- MENSAGENS CURTAS (CRÍTICO): mensagens devem ser CURTAS, diretas e conversacionais (estilo WhatsApp), NÃO blocos de texto longos.
-  • Se a resposta for simples → UM balão em "reply" (1-2 frases, max 280 caracteres).
-  • Se a resposta for mais rica (apresentar opções + pergunta qualificadora) → divide em DOIS balões: "reply" = contexto/apresentação curta, "follow_up" = pergunta ou call-to-action curto.
-  • NUNCA escrevas parágrafos grandes. Prefere sempre 2 mensagens curtas a 1 mensagem longa.
-- REGRAS SOBRE CARDS (NÃO QUEBRAR):
-  1. Se existem [ITEM ...] nos "Dados recuperados", inclui 1-4 como cards, copiando EXATAMENTE title/price/image/link/description.
-  2. NUNCA inventes preços, imagens, links ou itens. Só uses o que está nos "Dados recuperados".
-  3. Se não houver [ITEM ...] relevantes, devolve "cards": [].
-  4. NUNCA devolvas apenas texto sem o campo "cards" — se não houver items, "cards": [] é obrigatório.
-- O campo "reply" e "follow_up" devem ser conversacionais, sem mencionar JSON, cards, ou dados internos.
-
-EXEMPLO BOM (2 balões, curtos):
-Utilizador: "Quero um T2 em Lisboa"
-Dados recuperados: [ITEM 1] title=T2 Chiado ...
-Resposta válida:
-{{"reply": "Boa! Tenho esta opção no Chiado que pode encaixar no seu perfil.", "follow_up": "Qual o seu orçamento e se prefere zona histórica ou mais moderna?", "cards": [{{"title": "T2 Chiado", ...}}]}}
-
-EXEMPLO MAU (evitar — 1 mensagem longa):
-{{"reply": "Com base no que me diz, tenho esta excelente opção no Chiado que combina localização central, acabamentos modernos, e um preço competitivo. Gostaria de saber qual o seu orçamento aproximado e se tem preferência por zona histórica ou zona mais moderna para eu poder refinar a minha sugestão.", "cards": [...]}}
+EXEMPLO:
+Cliente: "Quero T2 em Lagos"
+Imóveis: [1] T2 Jardim de Lagos | Sob consulta...
+JSON: {{"reply": "Boa! Tenho esta opção em Lagos que encaixa.", "follow_up": "Qual o teu orçamento?", "use_items": [1]}}
 """
 
     turns = []
@@ -151,9 +143,14 @@ EXEMPLO MAU (evitar — 1 mensagem longa):
     provider = agent.get("model_provider") or "auto"
     model = agent.get("model_name") or "gpt-5.1"
 
-    # Force reasoning task whenever there are retrieved items (need to cite data reliably)
-    has_context = bool(retrieved)
-    task = "reasoning" if (has_context or intent.get("urgency") in {"high", "urgent"}) else "fast"
+    # Default to "fast" (gemini-2.5-flash) for sub-second responses.
+    # Only escalate to "reasoning" (gpt-5.1) for genuine complaints or urgent cases
+    # where higher reasoning quality matters more than speed.
+    is_complaint_urgent = (
+        intent.get("urgency") in {"high", "urgent"}
+        and intent.get("intent") in {"complaint", "support_request"}
+    )
+    task = "reasoning" if is_complaint_urgent else "fast"
 
     raw = await llm_complete(
         system_message=system,
@@ -175,7 +172,7 @@ EXEMPLO MAU (evitar — 1 mensagem longa):
             raw2 = await llm_complete(
                 system_message=(
                     "Recebes um texto e tens de o devolver APENAS como JSON válido no formato "
-                    '{"reply": str, "follow_up": str|null, "cards": [{"title","price","image","link","description"}]}. '
+                    '{"reply": str, "follow_up": str|null, "use_items": [int]}. '
                     "NUNCA uses markdown. NUNCA expliques. Devolve SÓ o JSON."
                 ),
                 user_text=f"Texto a converter em JSON:\n{raw}\n\nDevolve APENAS o JSON.",
@@ -192,43 +189,54 @@ EXEMPLO MAU (evitar — 1 mensagem longa):
 
     reply_text = data.get("reply") if isinstance(data, dict) else None
     follow_up = data.get("follow_up") if isinstance(data, dict) else None
-    cards = data.get("cards") if isinstance(data, dict) else None
+    use_items = data.get("use_items") if isinstance(data, dict) else None
+    # Backward compat: accept legacy "cards" array if the LLM returned it
+    legacy_cards = data.get("cards") if isinstance(data, dict) else None
 
     if not reply_text:
-        # Fallback: short generic reply, but RECOVER cards from retrieved items
-        # so the user doesn't end up with bare URLs/text in the chat.
-        reply_text = "Aqui estão algumas opções que podem encaixar 👇"
-        cards = _retrieved_to_cards(retrieved, limit=3)
-        follow_up = "Qual destas te interessa mais?" if cards else None
+        # Fallback: short generic reply + auto-attach top retrieved cards
+        if server_cards:
+            reply_text = "Aqui estão algumas opções que podem encaixar 👇"
+            follow_up = "Qual destas te interessa mais?"
+            use_items = list(range(1, len(server_cards) + 1))
+        else:
+            reply_text = "Obrigado pela sua mensagem — a equipa responderá em breve."
 
-    if not isinstance(cards, list):
-        cards = []
     if follow_up is not None and not isinstance(follow_up, str):
         follow_up = None
     if follow_up:
         follow_up = follow_up.strip() or None
 
-    # Clean cards
+    # Resolve cards: prefer use_items index list (new schema) → server-prebuilt cards
     safe_cards = []
-    for c in cards[:6]:
-        if not isinstance(c, dict):
-            continue
-        safe_cards.append({
-            "title": str(c.get("title", ""))[:160],
-            "price": str(c.get("price", ""))[:60],
-            "image": str(c.get("image", ""))[:600],
-            "link": str(c.get("link", ""))[:600],
-            "description": str(c.get("description", ""))[:400],
-        })
+    if isinstance(use_items, list):
+        for idx in use_items[:6]:
+            try:
+                i = int(idx) - 1
+                if 0 <= i < len(server_cards):
+                    safe_cards.append(server_cards[i])
+            except (ValueError, TypeError):
+                continue
+    elif isinstance(legacy_cards, list):
+        # Fall back to legacy schema (LLM emitted full card objects)
+        for c in legacy_cards[:6]:
+            if not isinstance(c, dict):
+                continue
+            safe_cards.append({
+                "title": str(c.get("title", ""))[:160],
+                "price": str(c.get("price", ""))[:60],
+                "image": str(c.get("image", ""))[:600],
+                "link": str(c.get("link", ""))[:600],
+                "description": str(c.get("description", ""))[:400],
+            })
 
-    # Last-resort safety net: if the model produced a reply but FORGOT to add cards
-    # AND we had retrieved items AND the reply text mentions URL/list-like content,
-    # auto-attach cards from retrieved items so the user sees a proper carousel.
-    if not safe_cards and retrieved:
+    # Safety net: reply mentions properties but no cards attached → auto-attach top items
+    if not safe_cards and server_cards:
         looks_like_listing = any(s in (reply_text or "").lower() for s in
-                                 ["http", "moradia", "apartamento", "imóvel", "imovel",
-                                  "t1", "t2", "t3", "t4", "v1", "v2", "v3", "v4"])
+                                 ["moradia", "apartamento", "imóvel", "imovel",
+                                  "t1", "t2", "t3", "t4", "v1", "v2", "v3", "v4",
+                                  "opção", "opções", "encaixa", "tenho"])
         if looks_like_listing:
-            safe_cards = _retrieved_to_cards(retrieved, limit=3)
+            safe_cards = server_cards[:3]
 
     return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
