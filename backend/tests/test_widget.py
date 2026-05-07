@@ -10,8 +10,8 @@ def _read_frontend_env():
     raise RuntimeError("REACT_APP_BACKEND_URL not set")
 
 BASE_URL = (os.environ.get("REACT_APP_BACKEND_URL") or _read_frontend_env()).rstrip("/")
-DEMO_EMAIL = "demo@consenso-agents.com"
-DEMO_PASS = "demo1234"
+DEMO_EMAIL = "admin@consenso-agents.com"
+DEMO_PASS = "100%Consenso"
 DEMO_TENANT = "896e44e0-98b9-4172-8841-32419fe495b7"
 DEMO_AGENT = "b7e15638-e0d7-4df2-8d33-1f3ee3a5f04f"
 
@@ -118,16 +118,23 @@ class TestRegressionAgentCentric:
         j = r.json()
         assert j.get("ok") is False or "error" in j
 
-    def test_webchat_with_agent_id(self):
+    def test_webchat_with_agent_id(self, auth):
         """POST /api/webchat/{tenant}/message with agent_id — must accept and reply."""
+        # Discover real tenant + agent for the authenticated user (cleanup-safe)
+        r = requests.get(f"{BASE_URL}/api/agents",
+                         headers={"Authorization": f"Bearer {auth['token']}"}, timeout=15)
+        assert r.status_code == 200
+        agents = r.json()
+        assert agents, "Tenant must have at least one agent"
+        agent = agents[0]
         payload = {
             "channel": "webchat",
             "external_user_id": "TEST_cp_it5",
             "contact_name": "TEST user",
             "text": "Olá",
-            "agent_id": DEMO_AGENT,
+            "agent_id": agent["id"],
         }
-        r = requests.post(f"{BASE_URL}/api/webchat/{DEMO_TENANT}/message",
+        r = requests.post(f"{BASE_URL}/api/webchat/{agent['tenant_id']}/message",
                           json=payload, timeout=45)
         assert r.status_code == 200, r.text
         j = r.json()
