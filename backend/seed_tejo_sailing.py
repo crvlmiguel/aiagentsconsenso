@@ -123,7 +123,7 @@ ICEBREAKERS = [
 WELCOME_MESSAGE = "Olá ⛵️ Sou o Tejo Sailing AI. Pronto para descobrires Lisboa a partir do Rio, ao pôr do sol?"
 
 # Sailboat at sunset stock photo
-AVATAR_URL = "https://images.unsplash.com/photo-1502780402662-acc01917cf26?w=200&h=200&fit=crop"
+AVATAR_URL = "https://images.unsplash.com/photo-1530549387789-4c1017266635?w=400&h=400&fit=crop&q=80"
 
 # Sunset over the river theme — warm orange + river blue
 THEME = {

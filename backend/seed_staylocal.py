@@ -122,8 +122,8 @@ ICEBREAKERS = [
 
 WELCOME_MESSAGE = "Bem-vindo ao StayLocal · Welcome 🌿 Sou o seu concierge digital. Em que destino podemos recebê-lo?"
 
-# Hotel/concierge stock photo (warm, premium, professional)
-AVATAR_URL = "https://images.unsplash.com/photo-1568084680786-a84f91d1153c?w=200&h=200&fit=crop&crop=faces"
+# Luxury hotel concierge / boutique
+AVATAR_URL = "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400&h=400&fit=crop&q=80"
 
 # Premium hotel theme — deep navy + gold accent
 THEME = {
