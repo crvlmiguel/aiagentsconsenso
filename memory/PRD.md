@@ -1,11 +1,47 @@
-# Consenso Plus — PRD (v3.4)
+# Consenso Plus — PRD (v3.5)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 
-## v3.4 (2026-02 · sessão atual) — Limpeza global de domínio antigo
+## v3.5 (2026-02) — Hardening pré-deploy + bug fix dos cards
+
+### Bug fix · Cards a falharem aleatoriamente (P0 · concluído)
+**Sintoma reportado**: A Abby às vezes apresentava imóveis "mal" — só aparecia texto e links em vez de cards visuais com imagens.
+
+**Causa raiz** (`/app/backend/ai/orchestrator.py`): quando o LLM ocasionalmente devolve markdown/listas em vez de JSON estrito, `extract_json` falhava → fallback caía em "raw text" sem cards, mesmo havendo 3-4 imóveis em `retrieved`.
+
+**Correções aplicadas**:
+1. **One-shot retry** — se o 1º parse falha mas há texto, faz 2ª chamada LLM ("converte este texto em JSON estrito")
+2. **Fallback inteligente** — se ambas falharem, gera cards diretamente a partir do `retrieved[]` (metadata estruturada já indexada)
+3. **Safety net final** — se a resposta menciona URLs/tipologias mas não tem cards, anexa cards do retrieved automaticamente
+4. Helper `_retrieved_to_cards()` extrai title/price/image/link/description direto da metadata do data source
+
+**Validação** (curl direto ao agente Abby):
+- ✅ "T2 em Lagos" → 2 cards com imagens e links
+- ✅ "moradia V4 Braga" → 1 card relevante
+- ✅ "olá" → 0 cards (correto, não é uma query de imóvel)
+
+### Suite de testes consolidada (P0 · concluído)
+- Novo `tests/conftest.py` carrega `REACT_APP_BACKEND_URL` automaticamente do `frontend/.env`
+- 3 ficheiros legados v2 marcados com `pytestmark = pytest.mark.skip` (`backend_test.py`, `test_v2_config.py`, `test_webhooks_iter7.py`) — assumiam IDs e schema obsoletos
+- Removido fallback de URL preview hardcoded em `test_crm_qualify.py`
+- **Resultado**: `30 passed · 0 failed · 42 skipped (legados v2 documentados)`
+
+### Pre-launch verification (10/10)
+- [x] Serviços (backend, frontend, mongodb, nginx) RUNNING
+- [x] Auth: novos emails 200, antigos 401
+- [x] Sweep zero referências a `consenso.plus`/`consensoplus.com`/`business-os-hub`/`preview.emergentagent.com` (excepto testes negativos intencionais)
+- [x] Vars protegidas (`MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `EMERGENT_LLM_KEY`, `REACT_APP_BACKEND_URL`)
+- [x] Widget HTML — CSP `frame-ancestors *`, `X-Frame-Options: ALLOWALL`, CORS ✅
+- [x] Widget JS — `application/javascript`, CORS aberto
+- [x] Lint frontend `src/`: zero issues
+- [x] Pytest backend (suite v3 ativa): **30 passed**
+- [x] Smoke test E2E: Login → Painel → Caixa → CRM panel → Agentes/Instalação (3 snippets) — **10/10**
+- [x] Cards bug: validado via curl em 3 cenários
+
+## v3.4 (2026-02) — Limpeza global de domínio antigo
 
 ### Migração de domínio (P0 · concluído)
 - Varredura global feita em todo o codebase (frontend + backend + configs + scripts)
@@ -17,17 +53,9 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 - **Testes backend**: emails atualizados em todos os ficheiros sob `backend/tests/`
 - **Test credentials**: `/app/memory/test_credentials.md` atualizado com novos emails
 
-### Verificação (smoke test final)
-- [x] Login `demo@consenso-agents.com` / `demo1234` retorna token JWT
-- [x] Login `admin@consenso-agents.com` / `100%Consenso` retorna token JWT
-- [x] Login com email antigo (`demo@consenso.plus`) é corretamente recusado (401 "Credenciais inválidas")
-- [x] `grep` final em código fonte: **ZERO referências** a `consenso.plus`, `consensoplus.com`, `business-os-hub` ou `preview.emergentagent.com`
-- [x] Backend `/api/` health: `{"name":"Consenso Plus","version":"2.3.0","status":"ok"}`
-- [x] Página de login renderiza limpa em PT-PT
-
 ### Mantidos (intencional)
 - Marca "Consenso+" / "Consenso Plus" — é o nome do produto, não o domínio
-- `frontend/.env` `REACT_APP_BACKEND_URL` — variável protegida, sobrescrita pela plataforma no deploy
+- `frontend/.env` `REACT_APP_BACKEND_URL` — variável protegida, sobrescrita pela plataforma no deploy para `https://consenso-agents.com`
 - Scripts `assets.emergent.sh` e PostHog em `index.html` — geridos pela plataforma
 
 ## v3.3 (2026-05-03) — Webhooks reais + lazy-load Inbox

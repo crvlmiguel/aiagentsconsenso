@@ -1,7 +1,30 @@
 """Agent Orchestrator — decides actions AND generates a structured response (reply + cards)."""
+import logging
 from typing import List, Dict, Any
-import json
 from .router import llm_complete, extract_json
+
+logger = logging.getLogger(__name__)
+
+
+def _retrieved_to_cards(retrieved: List[dict], limit: int = 3) -> List[dict]:
+    """Builds cards directly from retrieved items metadata (failure-safe fallback)."""
+    out = []
+    for d in retrieved or []:
+        if d.get("kind") != "item":
+            continue
+        meta = d.get("meta") or {}
+        if not meta.get("title"):
+            continue
+        out.append({
+            "title": str(meta.get("title", ""))[:160],
+            "price": str(meta.get("price", ""))[:60],
+            "image": str(meta.get("image", ""))[:600],
+            "link": str(meta.get("link", ""))[:600],
+            "description": str(meta.get("description", ""))[:400],
+        })
+        if len(out) >= limit:
+            break
+    return out
 
 
 def decide_actions(intent: dict, structure: dict, agent: dict) -> Dict[str, Any]:
@@ -144,15 +167,39 @@ EXEMPLO MAU (evitar — 1 mensagem longa):
     )
 
     data = extract_json(raw)
+
+    # One-shot retry: if JSON parsing failed but the LLM clearly responded,
+    # ask it once more to RE-emit the same response strictly as JSON.
+    if (not isinstance(data, dict) or not data.get("reply")) and raw and len(raw) > 10:
+        try:
+            raw2 = await llm_complete(
+                system_message=(
+                    "Recebes um texto e tens de o devolver APENAS como JSON válido no formato "
+                    '{"reply": str, "follow_up": str|null, "cards": [{"title","price","image","link","description"}]}. '
+                    "NUNCA uses markdown. NUNCA expliques. Devolve SÓ o JSON."
+                ),
+                user_text=f"Texto a converter em JSON:\n{raw}\n\nDevolve APENAS o JSON.",
+                session_id=f"reply-fix-{session_id}",
+                task="fast",
+                api_provider=agent.get("api_provider") or "emergent",
+                api_key=agent.get("api_key") or "",
+            )
+            data2 = extract_json(raw2)
+            if isinstance(data2, dict) and data2.get("reply"):
+                data = data2
+        except Exception as e:
+            logger.warning(f"orchestrator JSON retry failed: {e}")
+
     reply_text = data.get("reply") if isinstance(data, dict) else None
     follow_up = data.get("follow_up") if isinstance(data, dict) else None
     cards = data.get("cards") if isinstance(data, dict) else None
 
     if not reply_text:
-        # fallback: treat raw as plain text
-        reply_text = raw if raw else "Obrigado pela sua mensagem — a nossa equipa responderá em breve."
-        cards = []
-        follow_up = None
+        # Fallback: short generic reply, but RECOVER cards from retrieved items
+        # so the user doesn't end up with bare URLs/text in the chat.
+        reply_text = "Aqui estão algumas opções que podem encaixar 👇"
+        cards = _retrieved_to_cards(retrieved, limit=3)
+        follow_up = "Qual destas te interessa mais?" if cards else None
 
     if not isinstance(cards, list):
         cards = []
@@ -173,5 +220,15 @@ EXEMPLO MAU (evitar — 1 mensagem longa):
             "link": str(c.get("link", ""))[:600],
             "description": str(c.get("description", ""))[:400],
         })
+
+    # Last-resort safety net: if the model produced a reply but FORGOT to add cards
+    # AND we had retrieved items AND the reply text mentions URL/list-like content,
+    # auto-attach cards from retrieved items so the user sees a proper carousel.
+    if not safe_cards and retrieved:
+        looks_like_listing = any(s in (reply_text or "").lower() for s in
+                                 ["http", "moradia", "apartamento", "imóvel", "imovel",
+                                  "t1", "t2", "t3", "t4", "v1", "v2", "v3", "v4"])
+        if looks_like_listing:
+            safe_cards = _retrieved_to_cards(retrieved, limit=3)
 
     return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
