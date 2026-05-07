@@ -1,22 +1,66 @@
-# Consenso Plus — PRD (v3.5)
+# Consenso Plus — PRD (v3.6)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
+**Site comercial**: `consenso-shop.eu`
+
+## v3.6 (2026-02) — Limpeza para produção + agente Maria
+
+### Limpeza para uso real (P0 · concluído)
+Script idempotente `cleanup_for_production.py` removeu todos os dados de teste/demo:
+- **13 tenants apagados** (TEST_*, TestCo_*, "Imobiliária Lisboa" duplicado, "A minha empresa" do `demo@consenso-agents.com`)
+- **Conta `demo@consenso-agents.com` removida** (era placeholder)
+- **57 conversas + 220 mensagens + 51 leads + 1 ticket** fictícios apagados do tenant principal
+- **Agente "Aria" duplicado** apagado (legado de seed antigo)
+- **1 data source órfã + 49 chunks** limpos
+- **Tenant principal renomeado**: "Imobiliária Lisboa" → **"Consenso"**
+
+**Mantidos (intencionais)**:
+- `admin@consenso-agents.com` / `100%Consenso` (conta principal)
+- Agente **Abby** + 9 imóveis reais da ABBI (extraídos de abbimoveis.com)
+- `cevlmiguel@gmail.com` (signup real, tenant "Imo")
+
+### Novo agente — Maria (Assistente Consenso) (P0 · concluído)
+Script `seed_maria.py` cria/atualiza um agente dedicado ao site comercial `consenso-shop.eu`.
+
+**3 missões ao mesmo nível**:
+1. **EXPLICAR** — o que é um agente IA para imobiliárias (multilingue 24/7, qualificação, marcação de visitas)
+2. **VENDER** — converter visitantes em pedidos de demonstração (mensalidade fixa, sem fidelização, reembolso até onboarding)
+3. **DEMO MODE** — quando o utilizador pede "ver como funciona" ou "testar", a Maria entra em simulação interativa, fingindo ser uma agente de uma imobiliária fictícia (qualifica, apresenta imóveis, marca visita) e no fim regressa ao modo "Maria" com CTA para demonstração personalizada
+
+**Knowledge base**: 11 chunks indexados a partir do scraping do site `consenso-shop.eu` (problemas que resolve, 3 passos de implementação, idiomas, planos, FAQs, contacto).
+
+**Configuração**:
+- `welcome_message`: "Olá! 👋 Sou a Maria, assistente da Consenso. Quer ver como um agente IA funciona na prática?"
+- 4 icebreakers: "💡 O que é um agente IA?" · "🎬 Quero ver uma demo" · "🏠 Como funciona numa imobiliária?" · "📅 Pedir demonstração"
+- Tom: consultivo, profissional, direto · Idioma: PT-PT
+- Tools: `create_lead` (captura nome/email/telefone naturalmente)
+- Modelo: gemini-2.5-flash via Emergent LLM Key
+
+**Validação curl** dos 3 cenários:
+- ✅ Explicar — definição clara: "atende clientes 24/7, em vários idiomas, conhece o portefólio"
+- ✅ Vender — refere "mensalidade fixa, sem fidelização" + propõe agendar demonstração
+- ✅ Demo Mode — entra em simulação: "Vou simular um atendimento real para veres... [Como agente da Imobiliária Fictícia] Olá! Procura comprar ou arrendar?"
+
+### Estado final do tenant Consenso (admin@consenso-agents.com)
+- 2 agentes: **Abby** (cliente ABBI Imóveis) · **Maria** (Consenso — landing page consenso-shop.eu)
+- 0 conversas, 0 leads, 0 tickets (limpo, pronto para produção)
+- Pronto a embeber Maria via iFrame/Script no `consenso-shop.eu` e Abby no site da ABBI
 
 ## v3.5 (2026-02) — Hardening pré-deploy + bug fix dos cards
 
 ### Bug fix · Cards a falharem aleatoriamente (P0 · concluído)
 **Sintoma reportado**: A Abby às vezes apresentava imóveis "mal" — só aparecia texto e links em vez de cards visuais com imagens.
 
-**Causa raiz** (`/app/backend/ai/orchestrator.py`): quando o LLM ocasionalmente devolve markdown/listas em vez de JSON estrito, `extract_json` falhava → fallback caía em "raw text" sem cards, mesmo havendo 3-4 imóveis em `retrieved`.
+**Causa raiz** (`/app/backend/ai/orchestrator.py`): quando o LLM ocasionalmente devolve markdown/listas em vez de JSON estrito, `extract_json` falhava → fallback caía em "raw text" sem cards.
 
 **Correções aplicadas**:
-1. **One-shot retry** — se o 1º parse falha mas há texto, faz 2ª chamada LLM ("converte este texto em JSON estrito")
-2. **Fallback inteligente** — se ambas falharem, gera cards diretamente a partir do `retrieved[]` (metadata estruturada já indexada)
-3. **Safety net final** — se a resposta menciona URLs/tipologias mas não tem cards, anexa cards do retrieved automaticamente
-4. Helper `_retrieved_to_cards()` extrai title/price/image/link/description direto da metadata do data source
+1. **One-shot retry** se 1º parse falha
+2. **Fallback estruturado** usando metadata do `retrieved[]`
+3. **Safety net** auto-anexa cards se reply menciona imóveis
+4. Helper `_retrieved_to_cards()`
 
 **Validação** (curl direto ao agente Abby):
 - ✅ "T2 em Lagos" → 2 cards com imagens e links
