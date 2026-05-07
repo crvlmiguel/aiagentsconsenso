@@ -224,7 +224,7 @@ async def seed():
 
     print(f"✓ Tenant demo criado: {tenant_id}")
     print(f"✓ Login: {ADMIN_EMAIL} / {ADMIN_PASSWORD}")
-    print(f"✓ 3 conversas · 3 leads · 1 ticket · 4 imóveis na fonte")
+    print("✓ 3 conversas · 3 leads · 1 ticket · 4 imóveis na fonte")
     client.close()
 
 

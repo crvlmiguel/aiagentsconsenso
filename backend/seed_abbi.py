@@ -152,7 +152,7 @@ async def seed():
         await db.data_sources.delete_many({"agent_id": existing["id"]})
         await db.data_chunks.delete_many({"source_id": {"$in":
             [s["id"] for s in await db.data_sources.find({"agent_id": existing["id"]}).to_list(100)]}})
-        print(f"✓ Agente ABBI anterior removido.")
+        print("✓ Agente ABBI anterior removido.")
 
     agent_id = str(uuid.uuid4())
     source_id = str(uuid.uuid4())
@@ -291,7 +291,7 @@ async def seed():
     print(f"✓ Agente ABBI criado (id: {agent_id})")
     print(f"✓ Fonte de dados com {len(PROPERTIES)} imóveis indexados")
     print(f"✓ Login para testar: {ADMIN_EMAIL}")
-    print(f"\nURL do widget de teste:")
+    print("\nURL do widget de teste:")
     backend = os.environ.get("BACKEND_PUBLIC_URL", "<your-domain>")
     print(f"   {backend}/api/widget-test/{tenant_id}/{agent_id}")
     client.close()
