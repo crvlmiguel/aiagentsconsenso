@@ -1,10 +1,53 @@
-# Consenso Plus — PRD (v3.8)
+# Consenso Plus — PRD (v3.9)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.9 (2026-02) — Dashboard "Saúde dos canais" + pre-deploy checkup
+
+### Novo painel "Saúde dos canais" (P0 · concluído)
+Antes do v3.9 o cliente tinha de abrir cada agente individualmente para perceber se cada canal estava ligado. Agora há uma visão consolidada em `/app/painel` por baixo dos charts existentes.
+
+**Backend**:
+- Refactor: `agent_test_channel` extraiu a lógica de provider em `_run_channel_test(channel, ch)` (puro — sem DB writes), e o handler público passa a **persistir** `last_test_at`/`last_test_ok`/`last_test_info`/`last_test_error` em `agent.channels.{channel}.*` após cada chamada de teste.
+- Novo endpoint `GET /api/agents/health` (read-only, JWT) — devolve para cada agente ativo do tenant: `{id, name, avatar_url, channels:[{channel, enabled, configured, last_test_at, last_test_ok, last_test_info, last_test_error}]}` com os 5 canais (webchat, whatsapp, telegram, instagram, messenger). `configured=true` quando todos os campos obrigatórios do canal estão preenchidos (sem fazer ping ao provider).
+
+**Frontend (`Painel.jsx`)**:
+- Novo componente `<ChannelHealth />` mostrado abaixo dos charts existentes (data-testid: `channel-health`)
+- 1 card por agente com avatar/iniciais + contador "X / Y ligados"
+- 5 chips por agente (1 por canal): ícone + label + estado colorido + último teste relativo + info/erro do provider + botão "Testar agora" (excepto webchat)
+- Estados: `Inativo` (cinza), `Configuração incompleta` (laranja), `Ligado` (verde), `Falha` (vermelho), `Ativo · sem handshake` (azul)
+- Botão "Recarregar" no canto superior direito do card
+- Helper `formatRelative()` para "agora mesmo" / "há X min/h/dias"
+
+**Validação automatizada (testing_agent_v3_fork — iteration_10)**:
+- ✅ Backend: 9/9 novos testes em `test_health_dashboard.py` (auth, shape, 5 canais, telegram persiste falha, disabled retorna mensagem PT, unknown channel não dá 500, regressão widget e dashboard/stats)
+- ✅ Backend completo: **44 passed / 42 skipped** (suite v3 ativa) sem regressões
+- ✅ Frontend Playwright: card por agente, chips com estados corretos, "Testar agora" persiste estado e atualiza UI
+- ✅ Sem regressões em widget cross-domain, gpt-4o-mini latency 2.65s, ou canais sociais
+- **success_rate: backend=100%, frontend=100%**
+
+### Pre-deploy checkup (P0 · concluído — 8/8 verde)
+| # | Verificação | Estado |
+|---|---|---|
+| 1 | Supervisor (backend, frontend, mongodb, nginx) | ✅ RUNNING |
+| 2 | `.env` protegidas (`MONGO_URL`, `DB_NAME`, `JWT_SECRET`, `EMERGENT_LLM_KEY`, `OPENAI_API_KEY`) | ✅ SET |
+| 3 | `REACT_APP_BACKEND_URL` | ✅ SET |
+| 4 | Auth + endpoints chave (`/agents`, `/agents/health`, `/dashboard/stats`, `/conversations`, `/leads`, `/widget.js`, `/widget/{tid}`) | ✅ HTTP 200 |
+| 5 | Widget origin injection (`__CP_ORIGIN__` → backend domain) | ✅ Funciona |
+| 6 | Latência IA (Maria, gpt-4o-mini) | ✅ 2.65s |
+| 7 | Health endpoint sample (4 agentes × 5 canais) | ✅ |
+| 8 | Pytest backend suite | ✅ 44 passed |
+
+### Como o cliente põe live (3 passos)
+1. **Telegram**: criar bot no @BotFather → colar `bot_token` → guardar → chamar `setWebhook` com a URL exibida
+2. **WhatsApp Cloud**: na Meta Business Manager, criar app + número → colar `access_token`, `phone_number_id`, `verify_token` → configurar webhook
+3. **Instagram + Messenger**: na Meta App, ativar Webhooks (objeto `instagram` e `page`, campos `messages`) → colar `page_access_token` + `ig_user_id`/`page_id` + `verify_token` → testar ligação
+
+
 
 ## v3.8 (2026-02) — Omni-canal 100% live (Instagram + Messenger)
 

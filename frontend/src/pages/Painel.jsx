@@ -210,9 +210,9 @@ const Painel = () => {
         <div className="card-surface p-5">
           <div className="font-display font-semibold">Leads por estado</div>
           <p className="text-xs text-[#5B6B82] mt-0.5">Funil de qualificação.</p>
-          <div className="mt-4" style={{ width: "100%", height: 260, minHeight: 260 }}>
+          <div className="mt-4" style={{ width: "100%", height: 260, minHeight: 260, minWidth: 0 }}>
             {stats.by_stage && stats.by_stage.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%">
+              <ResponsiveContainer width="99%" height="100%">
                 <PieChart>
                   <Pie data={stats.by_stage} dataKey="count" nameKey="stage" innerRadius={55} outerRadius={90} paddingAngle={2}>
                     {stats.by_stage.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
