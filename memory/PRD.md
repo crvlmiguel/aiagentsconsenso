@@ -1,10 +1,47 @@
-# Consenso Plus — PRD (v3.7)
+# Consenso Plus — PRD (v3.8)
 
 ## Visão geral
-Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.8 (2026-02) — Omni-canal 100% live (Instagram + Messenger)
+
+### Novos canais (P0 · concluído)
+Antes do v3.8 só Webchat, WhatsApp e Telegram tinham webhooks reais. Instagram e Messenger estavam marcados "Brevemente". Agora os 4 canais sociais funcionam end-to-end via **Meta Graph API v20.0**.
+
+**Backend (`/app/backend/webhooks.py`)** — novas rotas por agente:
+- `GET /api/webhooks/instagram/{tenant_id}/{agent_id}` — Meta hub verification
+- `POST /api/webhooks/instagram/{tenant_id}/{agent_id}` — recebe `entry[].messaging[]` (objeto IG), processa via IA, responde via `POST /v20.0/{ig_user_id}/messages`
+- `GET /api/webhooks/messenger/{tenant_id}/{agent_id}` — Meta hub verification
+- `POST /api/webhooks/messenger/{tenant_id}/{agent_id}` — recebe `entry[].messaging[]` (objeto page), processa via IA, responde via `POST /v20.0/me/messages` com `messaging_type=RESPONSE`
+- Helpers `_send_messenger`, `_send_instagram` (mesma assinatura do `_send_whatsapp`)
+
+**Backend (`server.py`)** — novos casos no `agent_test_channel`:
+- `instagram` valida `page_access_token` + `ig_user_id` chamando `GET /v20.0/{ig_user_id}` (devolve `@username`)
+- `messenger` valida `page_access_token` + `page_id` chamando `GET /v20.0/{page_id}` (devolve nome + categoria)
+- Validação per-agente igual ao WhatsApp (não há tokens globais)
+
+**Frontend (`Agentes.jsx` separador Canais)**:
+- Removido bloco "comingSoon" para Instagram e Messenger
+- Cada canal tem 3 inputs: `page_access_token` (password), `ig_user_id`/`page_id` (text), `verify_token` (text)
+- Webhook URL gerado dinamicamente + botão "Copiar"
+- Hint contextual: "Adicione este URL nas Webhook Subscriptions da App Meta (objeto: instagram | page · campos: messages)"
+- Botão "Testar ligação" chama `/test-channel/{instagram|messenger}` em tempo real
+
+**Validação automatizada (testing_agent_v3_fork — iteration_9)**:
+- ✅ Backend pytest: **14/14 passed** (verify GET sucesso/403, POST inbound com payload Meta real, test-channel devolve "Invalid OAuth access token" da Meta com tokens FAKE — prova que chegamos à Graph API)
+- ✅ Frontend Playwright: 5 canais visíveis (`channel-webchat`, `channel-whatsapp`, `channel-telegram`, `channel-instagram`, `channel-messenger`), inputs e webhook URLs aparecem ao ativar
+- ✅ Sem regressões em widget cross-domain ou latência gpt-4o-mini
+- **success_rate: backend=100%, frontend=100%**
+
+### Como o cliente põe live (3 passos)
+1. **Telegram**: criar bot no @BotFather → colar `bot_token` → guardar → chamar `setWebhook` com a URL exibida
+2. **WhatsApp Cloud**: na Meta Business Manager, criar app + número → colar `access_token`, `phone_number_id`, `verify_token` → configurar webhook
+3. **Instagram + Messenger**: na Meta App, ativar Webhooks (objeto `instagram` e `page`, campos `messages`) → colar `page_access_token` + `ig_user_id`/`page_id` + `verify_token` → testar ligação
+
+
 
 ## v3.7 (2026-02) — Widget bullet-proof cross-domain + LLM rápido (gpt-4o-mini)
 
