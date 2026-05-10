@@ -316,7 +316,9 @@ async def agent_test_email(agent_id: str, body: dict, claims=Depends(current_use
 
 @api.post("/agents/{agent_id}/test-channel/{channel}")
 async def agent_test_channel(agent_id: str, channel: str, claims=Depends(current_user)):
-    """Validate a channel configuration by calling its provider API."""
+    """Validate a channel configuration by calling its provider API.
+    Persists the result on agent.channels.{channel}.last_test_* so the health dashboard
+    can show the most recent handshake without re-pinging providers."""
     import httpx
     agent = await db.agents.find_one({"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0})
     if not agent:
@@ -325,85 +327,154 @@ async def agent_test_channel(agent_id: str, channel: str, claims=Depends(current
     if not ch.get("enabled"):
         return {"ok": False, "error": "Canal desativado. Ative primeiro."}
 
+    result: dict = {"ok": False, "error": "Canal não suportado"}
     try:
-        if channel == "webchat":
-            return {"ok": True, "info": "Widget do agente pronto para instalação."}
-
-        if channel == "telegram":
-            token = (ch.get("bot_token") or "").strip()
-            if not token:
-                return {"ok": False, "error": "Bot Token em falta"}
-            async with httpx.AsyncClient(timeout=10) as hc:
-                r = await hc.get(f"https://api.telegram.org/bot{token}/getMe")
-            if r.status_code != 200:
-                return {"ok": False, "error": f"Telegram rejeitou o token (HTTP {r.status_code})"}
-            j = r.json()
-            if not j.get("ok"):
-                return {"ok": False, "error": j.get("description") or "Token inválido"}
-            info = j.get("result", {})
-            return {"ok": True, "info": f"@{info.get('username','?')} · {info.get('first_name','')}"}
-
-        if channel == "whatsapp":
-            tok = (ch.get("access_token") or "").strip()
-            pid = (ch.get("phone_number_id") or "").strip()
-            if not tok or not pid:
-                return {"ok": False, "error": "Access Token e Phone Number ID obrigatórios"}
-            async with httpx.AsyncClient(timeout=10) as hc:
-                r = await hc.get(
-                    f"https://graph.facebook.com/v20.0/{pid}",
-                    params={"fields": "display_phone_number,verified_name"},
-                    headers={"Authorization": f"Bearer {tok}"},
-                )
-            if r.status_code != 200:
-                try:
-                    msg = r.json().get("error", {}).get("message", "Erro desconhecido")
-                except Exception:
-                    msg = f"HTTP {r.status_code}"
-                return {"ok": False, "error": f"WhatsApp: {msg}"}
-            j = r.json()
-            return {"ok": True, "info": f"{j.get('verified_name','')} · {j.get('display_phone_number','')}"}
-
-        if channel == "messenger":
-            tok = (ch.get("page_access_token") or "").strip()
-            pid = (ch.get("page_id") or "").strip()
-            if not tok or not pid:
-                return {"ok": False, "error": "Page Access Token e Page ID obrigatórios"}
-            async with httpx.AsyncClient(timeout=10) as hc:
-                r = await hc.get(
-                    f"https://graph.facebook.com/v20.0/{pid}",
-                    params={"fields": "name,id,category", "access_token": tok},
-                )
-            if r.status_code != 200:
-                try:
-                    msg = r.json().get("error", {}).get("message", "Erro desconhecido")
-                except Exception:
-                    msg = f"HTTP {r.status_code}"
-                return {"ok": False, "error": f"Messenger: {msg}"}
-            j = r.json()
-            return {"ok": True, "info": f"{j.get('name','?')} · {j.get('category','Page')} (id={j.get('id','')})"}
-
-        if channel == "instagram":
-            tok = (ch.get("page_access_token") or "").strip()
-            iid = (ch.get("ig_user_id") or "").strip()
-            if not tok or not iid:
-                return {"ok": False, "error": "Page Access Token e IG User ID obrigatórios"}
-            async with httpx.AsyncClient(timeout=10) as hc:
-                r = await hc.get(
-                    f"https://graph.facebook.com/v20.0/{iid}",
-                    params={"fields": "username,name,profile_picture_url", "access_token": tok},
-                )
-            if r.status_code != 200:
-                try:
-                    msg = r.json().get("error", {}).get("message", "Erro desconhecido")
-                except Exception:
-                    msg = f"HTTP {r.status_code}"
-                return {"ok": False, "error": f"Instagram: {msg}"}
-            j = r.json()
-            return {"ok": True, "info": f"@{j.get('username','?')} · {j.get('name','')}"}
-
-        return {"ok": False, "error": f"Canal não suportado: {channel}"}
+        result = await _run_channel_test(channel, ch)
     except Exception as e:
-        return {"ok": False, "error": f"Erro de ligação: {str(e)[:200]}"}
+        result = {"ok": False, "error": f"Erro de ligação: {str(e)[:200]}"}
+
+    # Persist last handshake state for the health dashboard.
+    try:
+        await db.agents.update_one(
+            {"id": agent_id, "tenant_id": claims["tenant_id"]},
+            {"$set": {
+                f"channels.{channel}.last_test_at": now_iso(),
+                f"channels.{channel}.last_test_ok": bool(result.get("ok")),
+                f"channels.{channel}.last_test_info": (result.get("info") or "")[:240],
+                f"channels.{channel}.last_test_error": (result.get("error") or "")[:240],
+            }},
+        )
+    except Exception as e:
+        logger.warning(f"Could not persist last_test state: {e}")
+    return result
+
+
+async def _run_channel_test(channel: str, ch: dict) -> dict:
+    """Pure provider call — no DB writes. Returns {ok, info?, error?}."""
+    import httpx
+    if channel == "webchat":
+        return {"ok": True, "info": "Widget do agente pronto para instalação."}
+
+    if channel == "telegram":
+        token = (ch.get("bot_token") or "").strip()
+        if not token:
+            return {"ok": False, "error": "Bot Token em falta"}
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.get(f"https://api.telegram.org/bot{token}/getMe")
+        if r.status_code != 200:
+            return {"ok": False, "error": f"Telegram rejeitou o token (HTTP {r.status_code})"}
+        j = r.json()
+        if not j.get("ok"):
+            return {"ok": False, "error": j.get("description") or "Token inválido"}
+        info = j.get("result", {})
+        return {"ok": True, "info": f"@{info.get('username','?')} · {info.get('first_name','')}"}
+
+    if channel == "whatsapp":
+        tok = (ch.get("access_token") or "").strip()
+        pid = (ch.get("phone_number_id") or "").strip()
+        if not tok or not pid:
+            return {"ok": False, "error": "Access Token e Phone Number ID obrigatórios"}
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.get(
+                f"https://graph.facebook.com/v20.0/{pid}",
+                params={"fields": "display_phone_number,verified_name"},
+                headers={"Authorization": f"Bearer {tok}"},
+            )
+        if r.status_code != 200:
+            try:
+                msg = r.json().get("error", {}).get("message", "Erro desconhecido")
+            except Exception:
+                msg = f"HTTP {r.status_code}"
+            return {"ok": False, "error": f"WhatsApp: {msg}"}
+        j = r.json()
+        return {"ok": True, "info": f"{j.get('verified_name','')} · {j.get('display_phone_number','')}"}
+
+    if channel == "messenger":
+        tok = (ch.get("page_access_token") or "").strip()
+        pid = (ch.get("page_id") or "").strip()
+        if not tok or not pid:
+            return {"ok": False, "error": "Page Access Token e Page ID obrigatórios"}
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.get(
+                f"https://graph.facebook.com/v20.0/{pid}",
+                params={"fields": "name,id,category", "access_token": tok},
+            )
+        if r.status_code != 200:
+            try:
+                msg = r.json().get("error", {}).get("message", "Erro desconhecido")
+            except Exception:
+                msg = f"HTTP {r.status_code}"
+            return {"ok": False, "error": f"Messenger: {msg}"}
+        j = r.json()
+        return {"ok": True, "info": f"{j.get('name','?')} · {j.get('category','Page')} (id={j.get('id','')})"}
+
+    if channel == "instagram":
+        tok = (ch.get("page_access_token") or "").strip()
+        iid = (ch.get("ig_user_id") or "").strip()
+        if not tok or not iid:
+            return {"ok": False, "error": "Page Access Token e IG User ID obrigatórios"}
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.get(
+                f"https://graph.facebook.com/v20.0/{iid}",
+                params={"fields": "username,name,profile_picture_url", "access_token": tok},
+            )
+        if r.status_code != 200:
+            try:
+                msg = r.json().get("error", {}).get("message", "Erro desconhecido")
+            except Exception:
+                msg = f"HTTP {r.status_code}"
+            return {"ok": False, "error": f"Instagram: {msg}"}
+        j = r.json()
+        return {"ok": True, "info": f"@{j.get('username','?')} · {j.get('name','')}"}
+
+    return {"ok": False, "error": f"Canal não suportado: {channel}"}
+
+
+# ======================== AGENT HEALTH (omni-canal dashboard) ========================
+@api.get("/agents/health")
+async def agents_health(claims=Depends(current_user)):
+    """Aggregated health view for the dashboard. Returns a list of agents with each
+    channel's enabled/configured/last-handshake state. Read-only — does not call providers.
+    Use POST /agents/{id}/test-channel/{channel} to refresh the handshake."""
+    SOCIAL = ("webchat", "whatsapp", "telegram", "instagram", "messenger")
+    REQUIRED_FIELDS = {
+        "webchat": (),
+        "whatsapp": ("access_token", "phone_number_id"),
+        "telegram": ("bot_token",),
+        "instagram": ("page_access_token", "ig_user_id"),
+        "messenger": ("page_access_token", "page_id"),
+    }
+    cursor = db.agents.find(
+        {"tenant_id": claims["tenant_id"], "active": True},
+        {"_id": 0, "id": 1, "name": 1, "avatar_url": 1, "channels": 1, "tenant_id": 1, "theme": 1},
+    )
+    agents = await cursor.to_list(200)
+    out = []
+    for a in agents:
+        chs = (a.get("channels") or {})
+        items = []
+        for k in SOCIAL:
+            cfg = chs.get(k) or {}
+            enabled = bool(cfg.get("enabled"))
+            req = REQUIRED_FIELDS.get(k, ())
+            configured = bool(req == () or all(str(cfg.get(f) or "").strip() for f in req))
+            items.append({
+                "channel": k,
+                "enabled": enabled,
+                "configured": configured,
+                "last_test_at": cfg.get("last_test_at"),
+                "last_test_ok": cfg.get("last_test_ok"),
+                "last_test_info": cfg.get("last_test_info") or "",
+                "last_test_error": cfg.get("last_test_error") or "",
+            })
+        out.append({
+            "id": a["id"],
+            "name": a.get("name") or "",
+            "avatar_url": a.get("avatar_url") or "",
+            "tenant_id": a.get("tenant_id"),
+            "channels": items,
+        })
+    return out
 
 
 # ======================== DATA SOURCES ========================

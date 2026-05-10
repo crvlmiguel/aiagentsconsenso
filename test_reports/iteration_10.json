@@ -1,0 +1,36 @@
+{
+  "summary": "v3.9 — Channel Health Dashboard (/app/painel) end-to-end verification. Backend: 9/9 new pytest cases passed in test_health_dashboard.py (auth, shape, 5 channels per agent, _id excluded, webchat always configured, telegram bad-token persists last_test_at/ok=False/error, disabled channel returns 'Canal desativado', unknown channel non-500, dashboard/stats regression, widget.js __CP_ORIGIN__ regression). Full backend suite: 43 passed / 29 skipped (legacy v2) — no regressions. Frontend: Playwright on /app/painel verified 'Saúde dos canais' section renders with all 4 active agents (Abby/Maria/StayLocal/Tejo) × 5 channel chips each (webchat/whatsapp/telegram/instagram/messenger), data-testid='channel-health' + 'btn-health-refresh' + 'health-agent-{id}' + 'health-{aid}-{ch}' all present, KPI cards + 'Conversas por canal' bar + 'Leads por estado' pie still render. Persistence proven live: after pytest enabled Maria/telegram with INVALID:TOKEN and POSTed /test-channel/telegram → UI showed Maria's Telegram chip with 'Falha' (red), 'Telegram rejeitou o token (HTTP 404)' and 'Último teste: há 1 min'. Cleanup: all telegram channels reset to enabled=False after tests.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "/app/painel", "issues": ["Pre-existing recharts warning 'width(-1) and height(-1) of chart should be greater than 0' on initial render of 'Leads por estado' pie chart — chart eventually renders but flashes an open arc on the very first paint. Not a regression of this iteration; ResponsiveContainer first measures container before layout is finalized. Not blocking. Could be fixed by setting explicit min width or width=99% workaround."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_health_dashboard.py",
+    "/app/test_reports/pytest/iter10_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py _run_channel_test refactor is clean: pure function with no DB writes returning {ok, info?, error?}, called by agent_test_channel which then persists last_test_* via $set. Telegram regression preserved (HTTP 404 + 'Telegram rejeitou o token' message verified live).",
+    "GET /api/agents/health correctly: filters by tenant_id+active=True, projects out _id, builds REQUIRED_FIELDS map with proper handling of webchat (no required fields => always configured), reads last_test_* from persisted state. Read-only — no provider calls. Good separation from POST /test-channel which is the write path.",
+    "ChannelHealth component (Painel.jsx): proper loading/empty/data states, busy map keyed by `${agentId}:${channel}` so concurrent tests don't conflict, formatRelative helper handles null iso, status precedence is correct (Inativo→AlertTriangle config-incomplete→CheckCircle ok→AlertTriangle fail→Circle no-handshake), btn-health-test correctly hidden for webchat (no provider to ping) and for disabled channels.",
+    "Pre-existing lint warnings server.py:635 (E741 'l') and server.py:1285 (F841 'backend') confirmed NOT regressions of this iteration — line numbers shifted slightly due to insertion of ~140 new lines for _run_channel_test extraction + agents_health endpoint, which is expected.",
+    "data-testid coverage is excellent: channel-health, btn-health-refresh, health-agent-{id}, health-{aid}-{ch}, btn-health-test-{id}-{ch} — all stable for future regression suites."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_health_dashboard.py (new — 9 tests)"
+  ],
+  "success_rate": {"backend": "100% (9/9 new + 43/43 existing non-skipped)", "frontend": "100%"},
+  "test_credentials": "admin@consenso-agents.com / 100%Consenso (per /app/memory/test_credentials.md)",
+  "seed_data_creation": "None permanent. test_health_dashboard.py fixture toggled Maria's telegram enabled=true with bot_token='INVALID:TOKEN' and called POST /test-channel/telegram (which persisted last_test_ok=False + last_test_error='Telegram rejeitou o token (HTTP 404)'); teardown restored enabled=false and bot_token=''. Verified end-state via GET /agents/health: all 4 agents have all telegrams enabled=false. Maria retains historical last_test_ok=false/error=... fields — that's intentional and correct behaviour (the dashboard will only show 'Falha' if enabled=true, which it isn't).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Channel Health Dashboard is live and proven end-to-end. Re-run with: pytest backend/tests/test_health_dashboard.py -v (9 tests, ~3s). The fixture handles telegram enable/disable cleanup. Frontend stable selectors: data-testid='channel-health' (root), 'btn-health-refresh', 'health-agent-{agentId}' (one per active agent), 'health-{agentId}-{channel}' (5 per agent), 'btn-health-test-{agentId}-{channel}' (only for enabled non-webchat channels). All 4 production agent IDs in /app/memory/test_credentials.md. To verify 'Testar agora' UI button click: enable telegram on any agent with INVALID:TOKEN via PUT /api/agents/{id}, reload Painel, click btn-health-test-{id}-telegram → expect red toast + chip switching to 'Falha'.",
+  "rca of the issue": "N/A — no critical issues. New endpoint + dashboard component are working as specified. Pre-existing 'Leads por estado' chart first-paint width(-1) warning is documented under design_issues but is not a regression and not blocking deploy."
+}

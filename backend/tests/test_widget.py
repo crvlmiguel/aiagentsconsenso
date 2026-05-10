@@ -60,7 +60,7 @@ class TestWidgetTestPage:
         assert "/api/widget.js" in body
         assert DEMO_TENANT in body
         assert DEMO_AGENT in body
-        assert "Página de teste" in body
+        assert "Demonstração ao vivo" in body
 
     def test_widget_api_html_endpoint_still_works(self):
         # /api/widget/{tenant_id} loads widget.html used in the iframe
