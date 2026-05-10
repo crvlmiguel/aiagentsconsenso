@@ -1,10 +1,50 @@
-# Consenso Plus — PRD (v3.6)
+# Consenso Plus — PRD (v3.7)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via WhatsApp, Telegram e Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.7 (2026-02) — Widget bullet-proof cross-domain + LLM rápido (gpt-4o-mini)
+
+### Bug fix · Iframe do widget mostrava 404 no consenso-shop.eu (P0 · concluído)
+**Sintoma**: ao clicar no ícone de chat no `consenso-shop.eu` (WordPress + LiteSpeed Cache), o iframe abria a página do próprio `consenso-shop.eu` (404 "The Page Can't Be Found") em vez do widget Consenso+.
+
+**Causa raiz**: o `widget.js` resolvia o `origin` a partir de `script.src`, mas plugins WP (LiteSpeed, Cloudflare) podem reescrever `<script src>` como caminho relativo. O fallback `location.origin` apontava então para o domínio do site host → iframe carregava `https://consenso-shop.eu/api/widget/...` → 404.
+
+**Correções aplicadas**:
+1. **Backend (`server.py`)**: endpoint `GET /api/widget.js` agora **injeta o origin absoluto** no JS no momento de servir (`__CP_ORIGIN__` → `https://<host>`). Funciona em qualquer ambiente (preview ou produção) via `x-forwarded-host`.
+2. **Frontend (`widget.js`)**: nova ordem de prioridade na resolução do origin:
+   - `__CP_ORIGIN__` injetado pelo servidor (bullet-proof)
+   - Atributo `data-origin` no `<script>` (override manual)
+   - Parsing de `script.src` (legado)
+   - `location.origin` (último recurso)
+3. Cache `max-age=60` (em vez de 300) para invalidação mais rápida em produção.
+
+**Validação cross-domain** (Playwright em `example.com`):
+- ✅ Widget injetado em domínio externo
+- ✅ Iframe SRC = `https://<backend>/api/widget/...` (correto)
+- ✅ Chat abre com avatar Maria + theme gold/blue + icebreakers
+
+### Latência da IA reduzida para 3-5s (P0 · concluído)
+**Antes**: respostas em ~8-13s (mistura Emergent Universal Key + lógica em background).
+**Agora**: respostas em **2.67s–4.82s** consistentemente.
+
+**Configuração final**:
+- Chave OpenAI direta no `backend/.env` (`OPENAI_API_KEY`, fornecida pelo cliente)
+- `ai/router.py` força **`gpt-4o-mini` em todos os tasks** (`reasoning`, `long_context`, `fast`, `fallback`)
+- Resolução de chave: BYO key do agente → `OPENAI_API_KEY` env → fallback Universal Key
+
+**Benchmark via curl** (preview, 10/02/2026):
+| Agente | Query | Latência | Cards |
+|---|---|---|---|
+| Maria | "Olá" | 3.45s | 0 |
+| Maria | "O que é um agente IA?" | 4.82s | 0 |
+| Maria | "Quero ver uma demo" | 3.82s | 0 |
+| Abby | "Olá" | 2.67s | 0 |
+| Abby | "T2 em Lagos até 400k" | 3.08s | 1 |
+| Abby | "moradia V4 Braga" | 3.24s | 1 |
 
 ## v3.6 (2026-02) — Limpeza para produção + agente Maria
 

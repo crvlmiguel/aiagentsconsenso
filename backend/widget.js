@@ -19,10 +19,32 @@
       return;
     }
 
-    // Resolve origin from script src (works cross-domain)
+    // Resolve origin. PRIORITY:
+    //  1. Server-injected absolute origin (replaces __CP_ORIGIN__ at serve time) — bullet-proof
+    //     against WordPress/LiteSpeed/Cloudflare rewriting the <script src> as relative.
+    //  2. data-origin attribute on the <script> tag (manual override).
+    //  3. Parsed origin from script.src (only works when src is absolute).
+    //  4. As LAST resort, location.origin (likely wrong on third-party sites).
     var origin;
-    try { origin = new URL(script.src, document.baseURI).origin; }
-    catch (e) { origin = location.origin; }
+    var injected = "__CP_ORIGIN__"; // server replaces this with the real backend URL
+    var dataOrigin = script.getAttribute("data-origin") || "";
+    if (dataOrigin) {
+      origin = dataOrigin.replace(/\/$/, "");
+    } else if (injected && injected.indexOf("__CP_ORIGIN") !== 0 && /^https?:\/\//.test(injected)) {
+      origin = injected.replace(/\/$/, "");
+    } else {
+      try {
+        var parsed = new URL(script.src, document.baseURI);
+        // Only trust script.src when it's absolute and not the host page
+        if (parsed.origin && parsed.origin !== location.origin && /\/api\/widget\.js/.test(parsed.pathname)) {
+          origin = parsed.origin;
+        } else if (parsed.origin && /\/api\/widget\.js/.test(parsed.pathname)) {
+          origin = parsed.origin;
+        } else {
+          origin = location.origin;
+        }
+      } catch (e) { origin = location.origin; }
+    }
     var api = origin + "/api";
     var iframeSrc = origin + "/api/widget/" + encodeURIComponent(tenantId) +
       "?api=" + encodeURIComponent(api) +

@@ -1132,14 +1132,25 @@ _WIDGET_JS_PATH = ROOT_DIR / "widget.js"
 
 
 @api.get("/widget.js")
-async def widget_js_api():
+async def widget_js_api(request: Request):
     from fastapi.responses import Response
     try:
         content = _WIDGET_JS_PATH.read_text(encoding="utf-8")
     except Exception:
         content = "/* widget.js not found */"
+
+    # Inject the absolute backend origin so the iframe URL is bullet-proof against
+    # third-party CDNs (LiteSpeed, Cloudflare, WP plugins) that may rewrite <script src>
+    # as a relative path. This guarantees the chat iframe always loads from the
+    # backend domain and never from the host site.
+    host = request.headers.get("x-forwarded-host") or request.headers.get("host") or ""
+    proto = request.headers.get("x-forwarded-proto") or ("https" if request.url.scheme == "https" else "http")
+    if host:
+        backend_origin = f"{proto}://{host}"
+        content = content.replace("__CP_ORIGIN__", backend_origin)
+
     return Response(content=content, media_type="application/javascript",
-                    headers={"Cache-Control": "public, max-age=300",
+                    headers={"Cache-Control": "public, max-age=60",
                              "Access-Control-Allow-Origin": "*"})
 
 
