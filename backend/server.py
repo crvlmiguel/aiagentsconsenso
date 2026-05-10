@@ -363,6 +363,44 @@ async def agent_test_channel(agent_id: str, channel: str, claims=Depends(current
             j = r.json()
             return {"ok": True, "info": f"{j.get('verified_name','')} · {j.get('display_phone_number','')}"}
 
+        if channel == "messenger":
+            tok = (ch.get("page_access_token") or "").strip()
+            pid = (ch.get("page_id") or "").strip()
+            if not tok or not pid:
+                return {"ok": False, "error": "Page Access Token e Page ID obrigatórios"}
+            async with httpx.AsyncClient(timeout=10) as hc:
+                r = await hc.get(
+                    f"https://graph.facebook.com/v20.0/{pid}",
+                    params={"fields": "name,id,category", "access_token": tok},
+                )
+            if r.status_code != 200:
+                try:
+                    msg = r.json().get("error", {}).get("message", "Erro desconhecido")
+                except Exception:
+                    msg = f"HTTP {r.status_code}"
+                return {"ok": False, "error": f"Messenger: {msg}"}
+            j = r.json()
+            return {"ok": True, "info": f"{j.get('name','?')} · {j.get('category','Page')} (id={j.get('id','')})"}
+
+        if channel == "instagram":
+            tok = (ch.get("page_access_token") or "").strip()
+            iid = (ch.get("ig_user_id") or "").strip()
+            if not tok or not iid:
+                return {"ok": False, "error": "Page Access Token e IG User ID obrigatórios"}
+            async with httpx.AsyncClient(timeout=10) as hc:
+                r = await hc.get(
+                    f"https://graph.facebook.com/v20.0/{iid}",
+                    params={"fields": "username,name,profile_picture_url", "access_token": tok},
+                )
+            if r.status_code != 200:
+                try:
+                    msg = r.json().get("error", {}).get("message", "Erro desconhecido")
+                except Exception:
+                    msg = f"HTTP {r.status_code}"
+                return {"ok": False, "error": f"Instagram: {msg}"}
+            j = r.json()
+            return {"ok": True, "info": f"@{j.get('username','?')} · {j.get('name','')}"}
+
         return {"ok": False, "error": f"Canal não suportado: {channel}"}
     except Exception as e:
         return {"ok": False, "error": f"Erro de ligação: {str(e)[:200]}"}

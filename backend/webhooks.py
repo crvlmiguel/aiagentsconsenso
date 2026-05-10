@@ -53,6 +53,56 @@ async def _send_whatsapp(access_token: str, phone_number_id: str, to: str, text:
         return {"ok": False, "error": str(e)[:200]}
 
 
+async def _send_messenger(page_access_token: str, recipient_id: str, text: str) -> dict:
+    """Send via Facebook Messenger (Send API).
+    Uses messaging_type=RESPONSE which is allowed within 24h of user message."""
+    if not text:
+        return {"ok": False, "error": "empty text"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.post(
+                "https://graph.facebook.com/v20.0/me/messages",
+                params={"access_token": page_access_token},
+                json={
+                    "recipient": {"id": recipient_id},
+                    "messaging_type": "RESPONSE",
+                    "message": {"text": text[:1900]},
+                },
+            )
+        ok = r.status_code == 200
+        if not ok:
+            logger.warning(f"Messenger send failed {r.status_code}: {r.text[:300]}")
+        return {"ok": ok, "status": r.status_code}
+    except Exception as e:
+        logger.warning(f"Messenger send failed: {e}")
+        return {"ok": False, "error": str(e)[:200]}
+
+
+async def _send_instagram(page_access_token: str, ig_user_id: str, recipient_id: str, text: str) -> dict:
+    """Send via Instagram Direct (uses Instagram Messaging API on Graph v20.0).
+    Requires the IG user id (the business account id) and a recipient scoped IGSID."""
+    if not text:
+        return {"ok": False, "error": "empty text"}
+    try:
+        async with httpx.AsyncClient(timeout=10) as hc:
+            r = await hc.post(
+                f"https://graph.facebook.com/v20.0/{ig_user_id}/messages",
+                params={"access_token": page_access_token},
+                json={
+                    "recipient": {"id": recipient_id},
+                    "messaging_type": "RESPONSE",
+                    "message": {"text": text[:900]},
+                },
+            )
+        ok = r.status_code == 200
+        if not ok:
+            logger.warning(f"Instagram send failed {r.status_code}: {r.text[:300]}")
+        return {"ok": ok, "status": r.status_code}
+    except Exception as e:
+        logger.warning(f"Instagram send failed: {e}")
+        return {"ok": False, "error": str(e)[:200]}
+
+
 def build_router(db, process_inbound) -> APIRouter:
     """Create the webhooks router with injected db + _process_inbound dependency."""
 
@@ -171,6 +221,106 @@ def build_router(db, process_inbound) -> APIRouter:
                     if reply:
                         await _send_whatsapp(ch["access_token"], ch["phone_number_id"], wa_id, reply)
                     results.append({"wa_id": wa_id, "processed": True})
+        return {"ok": True, "results": results}
+
+    # ======================== MESSENGER (FACEBOOK PAGE) ========================
+    @router.get("/messenger/{tenant_id}/{agent_id}", response_class=PlainTextResponse)
+    async def messenger_verify(
+        tenant_id: str, agent_id: str,
+        request: Request = None,
+    ):
+        qp = request.query_params if request else {}
+        mode = qp.get("hub.mode")
+        token = qp.get("hub.verify_token")
+        challenge = qp.get("hub.challenge")
+        agent = await _get_agent(tenant_id, agent_id)
+        ch = (agent.get("channels") or {}).get("messenger") or {}
+        expected = (ch.get("verify_token") or "").strip()
+        if mode == "subscribe" and expected and token == expected:
+            return PlainTextResponse(challenge or "")
+        raise HTTPException(403, "Verificação falhou")
+
+    @router.post("/messenger/{tenant_id}/{agent_id}")
+    async def messenger_webhook(tenant_id: str, agent_id: str, request: Request):
+        agent = await _get_agent(tenant_id, agent_id)
+        ch = (agent.get("channels") or {}).get("messenger") or {}
+        if not ch.get("enabled") or not ch.get("page_access_token") or not ch.get("page_id"):
+            raise HTTPException(400, "Canal Messenger não configurado neste agente")
+        payload = await request.json()
+        results = []
+        # Meta payload: object="page", entry[].messaging[]
+        for entry in payload.get("entry") or []:
+            for ev in entry.get("messaging") or []:
+                sender = (ev.get("sender") or {}).get("id")
+                msg = ev.get("message") or {}
+                if msg.get("is_echo") or not sender:
+                    continue
+                text = msg.get("text") or ""
+                if not text and (msg.get("quick_reply") or {}).get("payload"):
+                    text = (msg.get("quick_reply") or {}).get("payload") or ""
+                if not text:
+                    continue
+                inbound = InboundMessage(
+                    channel="messenger",
+                    external_user_id=f"fb-{sender}",
+                    contact_name=f"Messenger {sender[-4:]}",
+                    text=text,
+                    agent_id=agent_id,
+                )
+                result = await process_inbound(tenant_id, inbound, agent_id=agent_id)
+                reply = (result or {}).get("reply")
+                if reply:
+                    await _send_messenger(ch["page_access_token"], sender, reply)
+                results.append({"sender": sender, "processed": True})
+        return {"ok": True, "results": results}
+
+    # ======================== INSTAGRAM DIRECT ========================
+    @router.get("/instagram/{tenant_id}/{agent_id}", response_class=PlainTextResponse)
+    async def instagram_verify(
+        tenant_id: str, agent_id: str,
+        request: Request = None,
+    ):
+        qp = request.query_params if request else {}
+        mode = qp.get("hub.mode")
+        token = qp.get("hub.verify_token")
+        challenge = qp.get("hub.challenge")
+        agent = await _get_agent(tenant_id, agent_id)
+        ch = (agent.get("channels") or {}).get("instagram") or {}
+        expected = (ch.get("verify_token") or "").strip()
+        if mode == "subscribe" and expected and token == expected:
+            return PlainTextResponse(challenge or "")
+        raise HTTPException(403, "Verificação falhou")
+
+    @router.post("/instagram/{tenant_id}/{agent_id}")
+    async def instagram_webhook(tenant_id: str, agent_id: str, request: Request):
+        agent = await _get_agent(tenant_id, agent_id)
+        ch = (agent.get("channels") or {}).get("instagram") or {}
+        if not ch.get("enabled") or not ch.get("page_access_token") or not ch.get("ig_user_id"):
+            raise HTTPException(400, "Canal Instagram não configurado neste agente")
+        payload = await request.json()
+        results = []
+        # Meta IG payload: object="instagram", entry[].messaging[]
+        for entry in payload.get("entry") or []:
+            for ev in entry.get("messaging") or []:
+                sender = (ev.get("sender") or {}).get("id")
+                msg = ev.get("message") or {}
+                if msg.get("is_echo") or not sender:
+                    continue
+                text = msg.get("text") or ""
+                if not text:
+                    continue
+                inbound = InboundMessage(
+                    channel="instagram",
+                    external_user_id=f"ig-{sender}",
+                    contact_name=f"IG {sender[-4:]}",
+                    text=text,
+                    agent_id=agent_id,
+                )
+                result = await process_inbound(tenant_id, inbound, agent_id=agent_id)
+                reply = (result or {}).get("reply")
+                if reply:
+                    await _send_instagram(ch["page_access_token"], ch["ig_user_id"], sender, reply)
+                results.append({"sender": sender, "processed": True})
         return {"ok": True, "results": results}
 
     return router
