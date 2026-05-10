@@ -12,12 +12,15 @@ from emergentintegrations.llm.chat import LlmChat, UserMessage
 logger = logging.getLogger(__name__)
 
 EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+OPENAI_KEY = os.environ.get("OPENAI_API_KEY", "")
 
+# Model strategy — optimized for SPEED (3-5s response target).
+# gpt-4o-mini is OpenAI's fastest model, ~1-2s typical, comparable quality to flash.
 TASK_MODELS = {
-    "reasoning": ("openai", "gpt-5.1"),
-    "long_context": ("anthropic", "claude-sonnet-4-5-20250929"),
-    "fast": ("gemini", "gemini-2.5-flash"),
-    "fallback": ("openai", "gpt-5.1"),
+    "reasoning": ("openai", "gpt-4o-mini"),
+    "long_context": ("openai", "gpt-4o-mini"),
+    "fast": ("openai", "gpt-4o-mini"),
+    "fallback": ("openai", "gpt-4o-mini"),
 }
 
 
@@ -34,13 +37,20 @@ def pick_model(task: str = "fast") -> tuple[str, str]:
 
 
 def _resolve_key(api_provider: str, api_key: Optional[str]) -> str:
-    """If api_provider is emergent/auto OR key is empty, use Emergent Universal Key."""
+    """Key priority:
+    1. If agent has explicit api_key set → use it (BYO key per agent).
+    2. If api_provider is 'openai' and OPENAI_API_KEY env is set → use direct OpenAI.
+    3. Else fall back to Emergent Universal Key.
+    """
+    if api_key:
+        return api_key
+    openai_env = os.environ.get("OPENAI_API_KEY", "") or OPENAI_KEY
+    if api_provider == "openai" and openai_env:
+        return openai_env
     emergent = os.environ.get("EMERGENT_LLM_KEY", "") or EMERGENT_KEY
-    if api_provider in ("emergent", "auto", "", None) or not api_key:
-        if not emergent:
-            raise LLMConfigMissing("API da IA não configurada ou inválida.")
-        return emergent
-    return api_key
+    if not emergent:
+        raise LLMConfigMissing("API da IA não configurada ou inválida.")
+    return emergent
 
 
 async def llm_complete(
