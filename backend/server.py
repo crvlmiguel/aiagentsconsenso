@@ -35,7 +35,7 @@ from ws_manager import manager as ws_manager
 from webhooks import build_router as build_webhooks_router
 from ai.finance import (
     detect_finance_intent, extract_price_from_text,
-    calcular_prestacao, format_simulation_pt,
+    calcular_prestacao, format_simulation_pt, extract_credit_params,
 )
 from ai.lead_score import compute_lead_score
 import follow_up as follow_up_module
@@ -1045,7 +1045,21 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
     # the current message or previous turn, run the simulation server-side and
     # inject it into the LLM context so Maria can speak about the actual numbers.
     finance_card = None
-    if detect_finance_intent(inbound.text):
+    # Detect intent: explicit credit keyword OR a continuation (user provided
+    # credit params AND a previous AI message mentioned simulação/crédito)
+    explicit_intent = detect_finance_intent(inbound.text)
+    current_params = extract_credit_params(inbound.text) if not explicit_intent else {}
+    is_continuation = False
+    if not explicit_intent and current_params:
+        for m in reversed(history[-6:]):
+            if m.get("sender") == "ai" and any(
+                k in (m.get("text", "") or "").lower()
+                for k in ("simulação", "simulacao", "crédito", "credito",
+                          "prestação", "prestacao", "entrada", "prazo")
+            ):
+                is_continuation = True
+                break
+    if explicit_intent or is_continuation:
         price = extract_price_from_text(inbound.text)
         if not price:
             for m in reversed(history):
@@ -1053,28 +1067,54 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
                 if price:
                     break
         if price and price > 10000:
+            # Extract optional params (entrada%, prazo, idade) from the whole conversation
+            params = {}
+            all_texts = [m.get("text", "") for m in history] + [inbound.text]
+            for t in reversed(all_texts):  # most recent first wins
+                ext = extract_credit_params(t)
+                for k, v in ext.items():
+                    if k not in params:
+                        params[k] = v
             try:
-                sim = calcular_prestacao(price)
+                sim = calcular_prestacao(price, **params)
+                # Build summary of what params were used vs defaulted
+                params_used = []
+                params_used.append(f"entrada {sim['entrada_pct']:.0f}% ({sim['entrada']:.0f}€)")
+                params_used.append(f"prazo {sim['prazo_anos']} anos")
+                if sim.get("idade"):
+                    params_used.append(f"idade {sim['idade']} (banco aceita até {sim['prazo_max_bancario']} anos)")
                 finance_card = {
                     "type": "finance_simulation",
                     "title": f"Simulação · {price:,.0f} €".replace(",", " "),
                     "prestacao_mensal": sim["prestacao_mensal"],
                     "entrada": sim["entrada"],
+                    "entrada_pct": sim["entrada_pct"],
                     "montante": sim["montante_credito"],
                     "prazo_anos": sim["prazo_anos"],
+                    "idade": sim.get("idade"),
+                    "prazo_max_bancario": sim.get("prazo_max_bancario"),
                     "taxa_total_pct": sim["taxa_total_pct"],
                     "text": format_simulation_pt(sim),
                 }
-                # Inject into retrieved as a text chunk so the LLM can reason about it
+                # Hint Maria about missing data — so she asks for the NEXT piece
+                missing = []
+                if "entrada_pct" not in params: missing.append("entrada")
+                if "prazo_anos" not in params and "idade" not in params: missing.append("prazo")
+                if "idade" not in params: missing.append("idade")
+                missing_hint = (
+                    f" Dados ainda em falta para refinar: {', '.join(missing)}."
+                    if missing else " Todos os dados recolhidos."
+                )
                 retrieved = (retrieved or []) + [{
                     "kind": "knowledge",
                     "text": (
                         f"SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora: "
-                        f"Imóvel {sim['valor_imovel']:.0f}€, entrada {sim['entrada_pct']:.0f}% "
-                        f"({sim['entrada']:.0f}€), montante {sim['montante_credito']:.0f}€ a {sim['prazo_anos']} anos. "
+                        f"Imóvel {sim['valor_imovel']:.0f}€, "
+                        f"parâmetros usados: {', '.join(params_used)}. "
                         f"Taxa {sim['taxa_total_pct']:.2f}% (Euribor + Spread). "
                         f"PRESTAÇÃO MENSAL: {sim['prestacao_mensal']:.2f}€. "
                         f"Total pago: {sim['total_pago']:.0f}€, juros: {sim['juros_totais']:.0f}€."
+                        f"{missing_hint}"
                     ),
                     "meta": {"topic": "simulacao_credito_live"},
                 }]

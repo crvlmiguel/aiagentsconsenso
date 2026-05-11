@@ -8,6 +8,7 @@ import pytest
 from ai.finance import (
     calcular_prestacao, detect_finance_intent,
     extract_price_from_text, format_simulation_pt,
+    extract_credit_params,
 )
 from ai.lead_score import compute_lead_score
 from property_feed import parse_csv, parse_xml
@@ -41,6 +42,54 @@ def test_finance_simulation_zero_entrada():
     sim = calcular_prestacao(300000, entrada_pct=0, prazo_anos=25)
     assert sim["entrada"] == 0
     assert sim["montante_credito"] == 300000
+
+
+def test_finance_simulation_idade_limits_prazo():
+    """Banco limita prazo a (80 - idade). 60 anos → max 20 anos."""
+    sim = calcular_prestacao(400000, prazo_anos=30, idade=60)
+    assert sim["idade"] == 60
+    assert sim["prazo_max_bancario"] == 20
+    assert sim["prazo_anos"] == 20  # foi clampado de 30 para 20
+
+
+def test_finance_simulation_idade_young_no_clamp():
+    """Cliente jovem (30 anos) → max 50 anos, mas request 30 → fica 30."""
+    sim = calcular_prestacao(400000, prazo_anos=30, idade=30)
+    assert sim["idade"] == 30
+    assert sim["prazo_max_bancario"] == 50
+    assert sim["prazo_anos"] == 30
+
+
+def test_extract_credit_params_entrada():
+    assert extract_credit_params("entrada de 20%")["entrada_pct"] == 20.0
+    assert extract_credit_params("25% de entrada")["entrada_pct"] == 25.0
+    assert extract_credit_params("sinal de 30%")["entrada_pct"] == 30.0
+
+
+def test_extract_credit_params_prazo():
+    assert extract_credit_params("prazo de 25 anos")["prazo_anos"] == 25
+    assert extract_credit_params("durante 30 anos")["prazo_anos"] == 30
+    assert extract_credit_params("20 anos de crédito")["prazo_anos"] == 20
+
+
+def test_extract_credit_params_idade():
+    assert extract_credit_params("tenho 45 anos")["idade"] == 45
+    assert extract_credit_params("sou jovem com 28 anos")["idade"] == 28
+    assert extract_credit_params("idade 35")["idade"] == 35
+    assert extract_credit_params("50 anos de idade")["idade"] == 50
+
+
+def test_extract_credit_params_combined():
+    """Múltiplos params na mesma frase — distingue prazo de idade."""
+    r = extract_credit_params("30% de entrada, prazo de 25 anos, tenho 45 anos")
+    assert r["entrada_pct"] == 30.0
+    assert r["prazo_anos"] == 25
+    assert r["idade"] == 45
+
+
+def test_extract_credit_params_empty():
+    assert extract_credit_params("") == {}
+    assert extract_credit_params("olá") == {}
 
 
 def test_detect_finance_intent_pt():
