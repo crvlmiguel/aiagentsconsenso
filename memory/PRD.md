@@ -1,10 +1,54 @@
-# Consenso Plus — PRD (v3.11)
+# Consenso Plus — PRD (v3.12)
 
 ## Visão geral
-Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming de tokens em tempo real**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token em tempo real**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.12 (2026-02) — Analytics avançada + typing adaptativo + 4 agentes openai
+
+### Analytics avançada por agente (P1 · concluído)
+**Backend** — novo `GET /api/agents/{id}/analytics?days=30`:
+- `totals` — conversations, messages, leads, conversion_rate
+- `daily_series` — array com exatamente `days` entradas (preenche dias vazios com 0)
+- `qualification_breakdown` — quente/morno/frio/outros (via `convo.qualification.status` e `convo.tags`)
+- `top_icebreakers` — top 8 primeiras mensagens dos visitantes, com `opens/leads/rate`
+- `funnel` — 4 etapas (Visitantes → Engajados 3+ msgs → Qualificados → Leads capturados)
+- Clamping rigoroso: `days ∈ [1, 365]`, default 30
+- 404 quando agente não pertence ao tenant
+
+**Frontend** — nova página `/app/analytics` (entre Painel e Caixa no menu):
+- Selector de agente + período (7/30/90 dias) + botão Recarregar
+- 4 cards KPI: Conversas, Mensagens, Leads, Taxa de conversão
+- LineChart "Evolução diária" (conversas vs leads)
+- Cards "Qualificação de leads" (chips Quente/Morno/Frio/Sem classificação com barras de progresso)
+- BarChart horizontal "Funil de conversão" com % drop-off entre etapas
+- Tabela "Top frases de abertura" (rate badge verde/laranja/cinza)
+
+### Typing adaptativo no widget (P2 · concluído)
+`widget.html::send()` reescrito com **queue de chars** + `setTimeout` drain:
+- ≥160 chars esperados → 5 chars/tick @ 8ms (catch-up rápido)
+- 40–160 chars → 2 chars/tick @ 18ms
+- <40 chars → 1 char/tick @ 35ms (deliberado, humano)
+- Catch-up automático se queue > 80 chars (8 chars/tick @ 6ms)
+- Resultado: sensação de "humano a escrever" sem cansar utilizador em respostas longas
+
+### DB hygiene + agentes uniformizados (P0 · concluído)
+- **Apagados 13 agentes duplicados** (10 "Assistente Principal" do tenant principal + 3 em tenants de teste)
+- **DB final: exatamente 4 agentes de produção** (Abby, Maria, StayLocal, Tejo)
+- **Todos os 4 agentes** agora com `api_provider="openai"` + `gpt-4o-mini` → todos suportam streaming nativo
+- **bootstrap.py** atualizado para que futuros deploys arranquem com `openai` por defeito (em vez de `emergent`)
+
+### Validação automatizada (testing_agent_v3_fork — iteration_12)
+- ✅ **11 novos testes analytics** em `test_agent_analytics.py` (shape, days clamping, 404, auth, streaming regression)
+- ✅ Frontend: 15/15 data-testids presentes (selectors, KPIs, gráficos, qual chips, icebreakers rows)
+- ✅ Streaming smoke (todos os 4 agentes): chunks Abby=11, Maria=38, StayLocal=33, Tejo=40
+- ✅ Pre-deploy final: TTFT Maria **0.98s**, 8 chunks, total 1.30s
+- ✅ **70/70 pytest passed** / 0 failed / 42 skipped
+- ✅ Deployment Agent: **PASS** — pronto para K8s production
+
+## v3.11 (2026-02) — Streaming SSE de tokens em tempo real
 
 ## v3.11 (2026-02) — Streaming SSE de tokens em tempo real
 
