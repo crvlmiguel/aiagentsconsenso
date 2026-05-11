@@ -144,9 +144,11 @@ INSTRUÇÕES (CRÍTICO):
   • Se "{reply_lang}" = "es" → responde APENAS en Español.
   • Se "{reply_lang}" = "nl" → responde APENAS in Nederlands.
   ⚠️ NUNCA mistures idiomas. NUNCA respondas em PT se o cliente escreveu noutro idioma.
-- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO:
-  O cliente vê o cartão automaticamente com os valores. NÃO peças mais dados.
-  Comenta brevemente o resultado (1 frase) e propõe próximo passo (visita / falar com banco / ver outros imóveis).
+- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO automaticamente:
+  ⚠️ O sistema usou Euribor atual (2,45%) + spread médio (1,20%) + 20% entrada + 30 anos POR DEFEITO.
+  ⚠️ NUNCA peças Euribor, spread, prazo ou taxa ao cliente — o sistema já trata disso.
+  O cliente vê o cartão automaticamente. Comenta em 1 frase ("Já tens a simulação 👆 — X €/mês com as condições atuais")
+  e propõe próximo passo (visita ao imóvel / ver outras opções). Mantém-no orientado a ação.
 - FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
 - MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão. Sem parágrafos.
 - "use_items" é uma lista com os números [1..N] dos imóveis que queres mostrar como cards. Lista vazia [] se nenhum encaixa.
@@ -394,9 +396,10 @@ INSTRUÇÕES (CRÍTICO):
   • Se "{reply_lang}" = "es" → responde APENAS en Español.
   • Se "{reply_lang}" = "nl" → responde APENAS in Nederlands.
   ⚠️ NUNCA mistures idiomas. NUNCA respondas em PT se o cliente escreveu noutro idioma.
-- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO:
-  O cliente vê o cartão automaticamente com os valores. NÃO peças mais dados.
-  Comenta brevemente o resultado (1 frase) e propõe próximo passo (visita / falar com banco).
+- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO automaticamente:
+  ⚠️ O sistema usou Euribor atual (2,45%) + spread médio (1,20%) + 20% entrada + 30 anos POR DEFEITO.
+  ⚠️ NUNCA peças Euribor, spread, prazo ou taxa ao cliente — o sistema já trata disso.
+  Comenta em 1 frase ("Já tens a simulação 👆 — X €/mês com as condições atuais") e propõe próximo passo (visita / ver outras opções).
 - FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
 - EMITE O CAMPO "reply" PRIMEIRO (antes de follow_up e use_items) — isto é OBRIGATÓRIO.
 - MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão.

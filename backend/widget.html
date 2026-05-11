@@ -226,7 +226,7 @@ function botMsg(text, icebreakers, cards, opts) {
           +   '<span>Prestação mensal</span>'
           +   '<strong>' + Number(c.prestacao_mensal).toLocaleString('pt-PT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €</strong>'
           + '</div>'
-          + '<div class="finance-note">Valores estimados · Sujeitos a aprovação bancária</div>'
+          + '<div class="finance-note">Euribor 12m + spread médio · 20% entrada · Sujeitos a aprovação bancária</div>'
           + '</div>'
         );
         card.innerHTML = html;
