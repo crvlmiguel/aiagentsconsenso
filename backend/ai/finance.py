@@ -166,6 +166,60 @@ def extract_credit_params(text: str) -> dict:
     return out
 
 
+def calcular_comparacao(
+    valor_imovel: float,
+    entrada_pct: float = 20.0,
+    prazo_anos: int = 30,
+    euribor: float = EURIBOR_12M_DEFAULT,
+    spread: float = SPREAD_DEFAULT,
+    idade: Optional[int] = None,
+) -> dict:
+    """Calcula 2 cenários lado-a-lado para ajudar o cliente a decidir o prazo.
+
+    Cenário primário: o que o cliente pediu (ou defaults).
+    Cenário alternativo: prazo ±5 anos para mostrar trade-off.
+      - Se primário >= 20 anos → alternativa é mais curta (-5) → menos juros, prestação +alta
+      - Se primário < 20 anos → alternativa é mais longa (+5) → mais juros, prestação +baixa
+    Se idade limita o prazo, respeita o limite bancário em ambos os cenários.
+
+    Returns:
+        {
+          "primary": {...sim completa},
+          "alternative": {...sim completa},
+          "delta": {prazo_diff, prestacao_diff, juros_diff_signed}
+        }
+    """
+    primary = calcular_prestacao(
+        valor_imovel, entrada_pct, prazo_anos, euribor, spread, idade,
+    )
+
+    # Decide o prazo alternativo
+    primary_prazo = primary["prazo_anos"]
+    max_prazo = primary.get("prazo_max_bancario") or 40
+    if primary_prazo >= 20:
+        alt_prazo = max(primary_prazo - 5, 5)
+    else:
+        alt_prazo = min(primary_prazo + 5, max_prazo)
+
+    # Garante que primário != alternativo
+    if alt_prazo == primary_prazo:
+        alt_prazo = max(primary_prazo - 5, 5) if primary_prazo > 10 else min(primary_prazo + 5, max_prazo)
+
+    alternative = calcular_prestacao(
+        valor_imovel, entrada_pct, alt_prazo, euribor, spread, idade,
+    )
+
+    return {
+        "primary": primary,
+        "alternative": alternative,
+        "delta": {
+            "prazo_diff": alternative["prazo_anos"] - primary["prazo_anos"],
+            "prestacao_diff": round(alternative["prestacao_mensal"] - primary["prestacao_mensal"], 2),
+            "juros_diff": round(alternative["juros_totais"] - primary["juros_totais"], 2),
+        },
+    }
+
+
 # ===== Detecção de intenção financeira =====
 _FINANCE_INTENT_RE = re.compile(
     r"\b(presta[çc][ãa]o|cr[ée]dito habita|cr[ée]dito hipotec|hipoteca|mortgage|"

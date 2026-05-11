@@ -36,6 +36,7 @@ from webhooks import build_router as build_webhooks_router
 from ai.finance import (
     detect_finance_intent, extract_price_from_text,
     calcular_prestacao, format_simulation_pt, extract_credit_params,
+    calcular_comparacao,
 )
 from ai.lead_score import compute_lead_score
 import follow_up as follow_up_module
@@ -1076,7 +1077,9 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
                     if k not in params:
                         params[k] = v
             try:
-                sim = calcular_prestacao(price, **params)
+                comp = calcular_comparacao(price, **params)
+                sim = comp["primary"]
+                alt = comp["alternative"]
                 # Build summary of what params were used vs defaulted
                 params_used = []
                 params_used.append(f"entrada {sim['entrada_pct']:.0f}% ({sim['entrada']:.0f}€)")
@@ -1094,7 +1097,16 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
                     "idade": sim.get("idade"),
                     "prazo_max_bancario": sim.get("prazo_max_bancario"),
                     "taxa_total_pct": sim["taxa_total_pct"],
+                    "juros_totais": sim["juros_totais"],
                     "text": format_simulation_pt(sim),
+                    # Cenário alternativo lado-a-lado
+                    "alternative": {
+                        "prazo_anos": alt["prazo_anos"],
+                        "prestacao_mensal": alt["prestacao_mensal"],
+                        "juros_totais": alt["juros_totais"],
+                        "total_pago": alt["total_pago"],
+                    },
+                    "delta": comp["delta"],
                 }
                 # Hint Maria about missing data — so she asks for the NEXT piece
                 missing = []

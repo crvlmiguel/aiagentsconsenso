@@ -8,7 +8,7 @@ import pytest
 from ai.finance import (
     calcular_prestacao, detect_finance_intent,
     extract_price_from_text, format_simulation_pt,
-    extract_credit_params,
+    extract_credit_params, calcular_comparacao,
 )
 from ai.lead_score import compute_lead_score
 from property_feed import parse_csv, parse_xml
@@ -90,6 +90,36 @@ def test_extract_credit_params_combined():
 def test_extract_credit_params_empty():
     assert extract_credit_params("") == {}
     assert extract_credit_params("olá") == {}
+
+
+def test_calcular_comparacao_long_term_shorter_alt():
+    """Prazo >= 20 anos → alternativa é -5 anos (mais curto, juros menores)."""
+    comp = calcular_comparacao(400000, prazo_anos=30)
+    assert comp["primary"]["prazo_anos"] == 30
+    assert comp["alternative"]["prazo_anos"] == 25
+    # Prestação alternativa (25y) deve ser MAIOR que primária (30y)
+    assert comp["alternative"]["prestacao_mensal"] > comp["primary"]["prestacao_mensal"]
+    # Juros totais alternativa devem ser MENORES
+    assert comp["alternative"]["juros_totais"] < comp["primary"]["juros_totais"]
+    assert comp["delta"]["prestacao_diff"] > 0  # +€/mês
+    assert comp["delta"]["juros_diff"] < 0      # -€ juros
+
+
+def test_calcular_comparacao_short_term_longer_alt():
+    """Prazo < 20 anos → alternativa é +5 anos (mais longo)."""
+    comp = calcular_comparacao(300000, prazo_anos=15)
+    assert comp["primary"]["prazo_anos"] == 15
+    assert comp["alternative"]["prazo_anos"] == 20
+    # Prestação alternativa deve ser MENOR
+    assert comp["alternative"]["prestacao_mensal"] < comp["primary"]["prestacao_mensal"]
+
+
+def test_calcular_comparacao_respeita_idade():
+    """Cliente 65 anos → max bancário 15 anos. Alternativa não pode exceder isto."""
+    comp = calcular_comparacao(400000, prazo_anos=15, idade=65)
+    assert comp["primary"]["prazo_anos"] == 15
+    # Alternativa quer ser 20 mas tem de respeitar 15 (max bancário). Logo fica diferente.
+    assert comp["alternative"]["prazo_anos"] <= 15
 
 
 def test_detect_finance_intent_pt():
