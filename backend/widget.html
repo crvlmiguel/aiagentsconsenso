@@ -259,11 +259,14 @@ async function send(text) {
 
     streamed = true;
     let row = null, bubble = null, accReply = "", finalCards = [], finalFollow = null;
-    // Adaptive typing — drains incoming chars at a human-like cadence.
-    // Slow for short replies (feels deliberate), fast for long ones (no patience-test).
-    let pendingChars = [];           // queue of chars not yet rendered
-    let renderedText = "";           // what's currently on screen
-    let streamDone = false;          // backend stream finished?
+    // Adaptive typing — drains chars at human-like cadence.
+    // Calibrated to feel like reading someone TYPING (not skimming a paste).
+    //   Slow typist ~30 WPM = ~30 chars/s
+    //   Natural    ~40 WPM = ~40 chars/s
+    //   Fast       ~60 WPM = ~55 chars/s
+    let pendingChars = [];
+    let renderedText = "";
+    let streamDone = false;
     let typingTimer = null;
 
     const startTypingTimer = () => {
@@ -274,28 +277,36 @@ async function send(text) {
             typingTimer = null;
             return;
           }
-          typingTimer = setTimeout(tick, 40);
+          typingTimer = setTimeout(tick, 50);
           return;
         }
-        // Adaptive batch + delay
-        // - Very short expected total (<40): 1 char per tick @ 35ms
-        // - Medium (<160): 2 chars @ 18ms
-        // - Long (>=160): 4-6 chars @ 8ms (fast catch-up)
+        // Adaptive delay per char — NO batching, always 1 char per tick for natural feel.
+        // Short replies (<40 chars expected): deliberate pace ~50ms/char = 20 c/s
+        // Medium (40-160): natural typing      ~30ms/char = 33 c/s
+        // Long (>=160): brisk reading pace     ~18ms/char = 55 c/s
         const expectedTotal = renderedText.length + pendingChars.length;
-        let batch = 1, delay = 35;
-        if (expectedTotal >= 160) { batch = 5; delay = 8; }
-        else if (expectedTotal >= 40) { batch = 2; delay = 18; }
-        // If we're falling far behind the buffer, accelerate
-        if (pendingChars.length > 80) { batch = Math.min(8, pendingChars.length); delay = 6; }
-        const chunk = pendingChars.splice(0, batch).join("");
-        renderedText += chunk;
+        let delay;
+        if (expectedTotal >= 160) delay = 18;
+        else if (expectedTotal >= 40) delay = 30;
+        else delay = 50;
+        // Micro-jitter (±15%) so it doesn't feel like a metronome
+        delay = delay * (0.85 + Math.random() * 0.3);
+        // Slight pause after punctuation — adds rhythm
+        const lastChar = renderedText[renderedText.length - 1];
+        if (lastChar === "." || lastChar === "!" || lastChar === "?") delay += 120;
+        else if (lastChar === ",") delay += 50;
+        // Catch-up safety net — if backend is way ahead, drain a tiny bit faster
+        // but NEVER skip chars / batch (keeps it natural)
+        if (pendingChars.length > 200) delay = Math.max(10, delay * 0.55);
+        const ch = pendingChars.shift();
+        renderedText += ch;
         if (bubble) {
           bubble.textContent = renderedText;
           msgs.scrollTop = msgs.scrollHeight;
         }
         typingTimer = setTimeout(tick, delay);
       };
-      typingTimer = setTimeout(tick, 35);
+      typingTimer = setTimeout(tick, 50);
     };
 
     const reader = res.body.getReader();
