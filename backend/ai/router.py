@@ -5,7 +5,7 @@ import os
 import json
 import logging
 import re
-from typing import Optional
+from typing import Optional, AsyncIterator
 
 from emergentintegrations.llm.chat import LlmChat, UserMessage
 
@@ -133,3 +133,41 @@ def extract_json(text: str) -> dict:
         return json.loads(cleaned)
     except Exception:
         return {}
+
+
+async def llm_stream(
+    system_message: str,
+    user_text: str,
+    api_provider: str = "openai",
+    api_key: Optional[str] = None,
+    model: Optional[str] = None,
+) -> AsyncIterator[str]:
+    """Stream raw text chunks from an OpenAI-compatible model.
+
+    Currently only supports OpenAI (which is what our default `gpt-4o-mini` route uses).
+    Falls back gracefully — caller should catch LLMConfigMissing / LLMProviderError
+    and degrade to non-streaming llm_complete().
+    """
+    key = _resolve_key(api_provider, api_key)
+    mdl = model or pick_model("fast")[1]
+    try:
+        import openai
+        client = openai.AsyncOpenAI(api_key=key, timeout=20.0)
+        stream = await client.chat.completions.create(
+            model=mdl,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": user_text},
+            ],
+            stream=True,
+            temperature=0.7,
+        )
+        async for ev in stream:
+            try:
+                delta = ev.choices[0].delta.content if ev.choices else None
+            except Exception:
+                delta = None
+            if delta:
+                yield delta
+    except Exception as e:
+        raise LLMProviderError(f"Streaming falhou: {str(e)[:160]}") from e

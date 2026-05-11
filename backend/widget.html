@@ -243,27 +243,106 @@ async function send(text) {
   typing.innerHTML = "<span></span><span></span><span></span>";
   msgs.appendChild(typing);
   msgs.scrollTop = msgs.scrollHeight;
+
+  // Try streaming first (SSE). Falls back to /message if browser/network blocks it.
+  let streamed = false;
   try {
-    const j = await postWithRetry(API + "/webchat/" + TENANT + "/message", {
-      channel: "webchat", external_user_id: UID, contact_name: NAME_V,
-      text: text, agent_id: AGENT_ID || null,
+    const res = await fetch(API + "/webchat/" + TENANT + "/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+      body: JSON.stringify({
+        channel: "webchat", external_user_id: UID, contact_name: NAME_V,
+        text: text, agent_id: AGENT_ID || null,
+      }),
     });
-    typing.remove();
-    botMsg(j.reply || "…", [], []);
-    if (j.follow_up || (j.cards && j.cards.length > 0)) {
+    if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
+
+    streamed = true;
+    let row = null, bubble = null, accReply = "", finalCards = [], finalFollow = null;
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder("utf-8");
+    let buf = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      // SSE messages are separated by \n\n
+      let idx;
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const ev = buf.slice(0, idx).trim();
+        buf = buf.slice(idx + 2);
+        if (!ev.startsWith("data:")) continue;
+        let evt;
+        try { evt = JSON.parse(ev.slice(5).trim()); } catch (_) { continue; }
+        if (evt.type === "chunk") {
+          if (!bubble) {
+            // First token arrived — hide typing, create empty bubble
+            typing.remove();
+            row = document.createElement("div");
+            row.className = "row bot";
+            row.appendChild(miniAvatar());
+            bubble = document.createElement("div");
+            bubble.className = "msg bot";
+            row.appendChild(bubble);
+            msgs.appendChild(row);
+          }
+          accReply += evt.text;
+          bubble.textContent = accReply;
+          msgs.scrollTop = msgs.scrollHeight;
+        } else if (evt.type === "done") {
+          finalCards = evt.cards || [];
+          finalFollow = evt.follow_up || null;
+          // Ensure bubble exists (in case no chunks were emitted)
+          if (!bubble) {
+            typing.remove();
+            botMsg(evt.reply || "…", [], []);
+          } else {
+            // Replace bubble text with the final reply (in case JSON-escapes differed)
+            bubble.textContent = evt.reply || accReply;
+          }
+        } else if (evt.type === "error") {
+          throw new Error(evt.error || "stream error");
+        }
+      }
+    }
+
+    // Render follow-up + cards (typing dots between for natural feel)
+    if (finalFollow || finalCards.length > 0) {
       const typing2 = document.createElement("div");
       typing2.className = "typing";
       typing2.innerHTML = "<span></span><span></span><span></span>";
       msgs.appendChild(typing2);
       msgs.scrollTop = msgs.scrollHeight;
-      await new Promise(r => setTimeout(r, 900));
+      await new Promise(r => setTimeout(r, 600));
       typing2.remove();
-      botMsg(j.follow_up || "", [], j.cards || [], { continuation: true });
+      botMsg(finalFollow || "", [], finalCards, { continuation: true });
     }
   } catch (err) {
+    // Fallback to non-streaming endpoint
+    if (!streamed) {
+      try {
+        const j = await postWithRetry(API + "/webchat/" + TENANT + "/message", {
+          channel: "webchat", external_user_id: UID, contact_name: NAME_V,
+          text: text, agent_id: AGENT_ID || null,
+        });
+        typing.remove();
+        botMsg(j.reply || "…", [], []);
+        if (j.follow_up || (j.cards && j.cards.length > 0)) {
+          const typing2 = document.createElement("div");
+          typing2.className = "typing";
+          typing2.innerHTML = "<span></span><span></span><span></span>";
+          msgs.appendChild(typing2);
+          msgs.scrollTop = msgs.scrollHeight;
+          await new Promise(r => setTimeout(r, 900));
+          typing2.remove();
+          botMsg(j.follow_up || "", [], j.cards || [], { continuation: true });
+        }
+        return;
+      } catch (_) { /* fall through to error message */ }
+    }
     typing.remove();
     botMsg("⚠️ Problema de ligação. A tentar novamente assim que possível.", [], []);
-    // Try once more after a short delay — works if connection just came back
     setTimeout(() => {
       if (navigator.onLine) send(text);
     }, 4000);

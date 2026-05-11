@@ -1,5 +1,6 @@
 """Agent Orchestrator — decides actions AND generates a structured response (reply + cards)."""
 import logging
+import re
 from typing import List, Dict, Any
 from .router import llm_complete, extract_json
 
@@ -240,3 +241,169 @@ JSON: {{"reply": "Boa! Tenho esta opção em Lagos que encaixa.", "follow_up": "
             safe_cards = server_cards[:3]
 
     return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
+
+
+# ============================================================================
+# STREAMING VARIANT — yields events for SSE-driven progressive rendering.
+# Same contract as generate_response (JSON {reply, follow_up, use_items}) but
+# extracts the `reply` field incrementally so the UI can paint tokens live.
+# ============================================================================
+
+import json as _json
+from ai.router import llm_stream  # noqa: E402  (intentional: only needed for streaming)
+
+
+def _extract_partial_reply(buffer: str) -> str:
+    """Given a buffer that contains '"reply"\\s*:\\s*"<chars>...' (possibly incomplete),
+    return the current decoded value of the reply field. Handles JSON escapes.
+    Returns "" if reply field hasn't started yet."""
+    m = re.search(r'"reply"\s*:\s*"', buffer)
+    if not m:
+        return ""
+    start = m.end()
+    # Walk until matching unescaped quote (or end of buffer)
+    i = start
+    out = []
+    while i < len(buffer):
+        ch = buffer[i]
+        if ch == "\\" and i + 1 < len(buffer):
+            nxt = buffer[i + 1]
+            esc_map = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\", "/": "/"}
+            if nxt in esc_map:
+                out.append(esc_map[nxt])
+                i += 2
+                continue
+            if nxt == "u" and i + 5 < len(buffer):
+                try:
+                    out.append(chr(int(buffer[i+2:i+6], 16)))
+                    i += 6
+                    continue
+                except ValueError:
+                    break
+            # Incomplete escape — stop, wait for next chunk
+            break
+        if ch == '"':
+            return "".join(out)
+        out.append(ch)
+        i += 1
+    return "".join(out)
+
+
+async def generate_response_stream(
+    agent: dict,
+    history: list,
+    intent: dict,
+    structure: dict,
+    retrieved: List[dict],
+    language: str,
+    session_id: str,
+):
+    """Async generator yielding events:
+      {"type": "chunk", "text": "delta"} — reply token deltas (progressive)
+      {"type": "done", "reply": str, "follow_up": str|None, "cards": list, "language": str}
+
+    Falls back to non-streaming generate_response on any error (caller decides how to expose).
+    """
+    tone = agent.get("tone", "professional")
+    rules = agent.get("rules", "")
+    knowledge = agent.get("knowledge", "")
+    base_prompt = agent.get("system_prompt") or "És um assistente útil."
+    default_lang = agent.get("default_language") or "pt"
+    reply_lang = language or default_lang
+
+    server_cards = _retrieved_to_cards(retrieved, limit=4)
+    items_summary = ""
+    if server_cards:
+        lines = []
+        for i, c in enumerate(server_cards, 1):
+            lines.append(f"[{i}] {c['title']} | {c.get('price','')} | {c.get('description','')[:100]}")
+        items_summary = "\n".join(lines)
+
+    system = f"""{base_prompt}
+
+Tom: {tone}.
+Objetivo: {agent.get('goal', 'Ajudar o cliente')}.
+Regras: {rules or 'Sê conciso. Sê honesto.'}
+
+{f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
+{f"Conhecimento adicional: {knowledge}" if knowledge else ""}
+
+INSTRUÇÕES (CRÍTICO):
+- IDIOMA: responde no mesmo idioma do cliente (detectado: {reply_lang}; se pt → pt-PT, NUNCA pt-BR).
+- FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
+- EMITE O CAMPO "reply" PRIMEIRO (antes de follow_up e use_items) — isto é OBRIGATÓRIO.
+- MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão.
+- "use_items" é uma lista [1..N] dos imóveis para mostrar como cards. Lista vazia [] se nenhum encaixa.
+- NÃO copies título/preço/link no reply — eles aparecem nos cards automaticamente.
+"""
+
+    turns = []
+    for m in history[-10:]:
+        role = "USER" if m["sender"] == "user" else "ASSISTANT"
+        turns.append(f"{role}: {m['text']}")
+    convo = "\n".join(turns) if turns else "(nova conversa)"
+
+    # Stream raw tokens
+    buffer = ""
+    last_emitted = ""
+    try:
+        async for delta in llm_stream(
+            system_message=system,
+            user_text=f"Histórico:\n{convo}\n\nResponde à última mensagem do utilizador em JSON.",
+            api_provider=agent.get("api_provider") or "openai",
+            api_key=agent.get("api_key") or "",
+            model=agent.get("model_name") or "gpt-4o-mini",
+        ):
+            buffer += delta
+            # Try to extract the current reply value
+            current = _extract_partial_reply(buffer)
+            if current and current != last_emitted and len(current) > len(last_emitted):
+                yield {"type": "chunk", "text": current[len(last_emitted):]}
+                last_emitted = current
+    except Exception as e:
+        logger.warning(f"stream failed, falling back: {e}")
+        # Fallback to non-streaming generate_response
+        full = await generate_response(agent, history, intent, structure, retrieved, language, session_id)
+        if last_emitted == "" and full.get("reply"):
+            yield {"type": "chunk", "text": full["reply"]}
+        yield {"type": "done", **full}
+        return
+
+    # Parse final JSON
+    data = extract_json(buffer) or {}
+    reply_text = data.get("reply") or last_emitted or "Obrigado pela sua mensagem."
+    follow_up = data.get("follow_up")
+    use_items = data.get("use_items")
+
+    if follow_up is not None and not isinstance(follow_up, str):
+        follow_up = None
+    if follow_up:
+        follow_up = follow_up.strip() or None
+
+    safe_cards = []
+    if isinstance(use_items, list):
+        for idx in use_items[:6]:
+            try:
+                i = int(idx) - 1
+                if 0 <= i < len(server_cards):
+                    safe_cards.append(server_cards[i])
+            except (ValueError, TypeError):
+                continue
+
+    if not safe_cards and server_cards:
+        looks_like_listing = any(s in (reply_text or "").lower() for s in
+                                 ["moradia", "apartamento", "imóvel", "imovel",
+                                  "t1", "t2", "t3", "t4", "v1", "v2", "v3", "v4",
+                                  "opção", "opções", "encaixa", "tenho"])
+        if looks_like_listing:
+            safe_cards = server_cards[:3]
+
+    # If we never streamed a reply char (e.g. LLM emitted use_items first), emit it now
+    if last_emitted == "" and reply_text:
+        yield {"type": "chunk", "text": reply_text}
+
+    yield {
+        "type": "done",
+        "reply": reply_text, "follow_up": follow_up,
+        "cards": safe_cards, "language": reply_lang,
+    }

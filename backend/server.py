@@ -971,6 +971,154 @@ async def webchat_inbound(tenant_id: str, inbound: InboundMessage):
     return await _process_inbound(tenant_id, inbound, agent_id=inbound.agent_id)
 
 
+@api.post("/webchat/{tenant_id}/stream")
+async def webchat_stream(tenant_id: str, inbound: InboundMessage):
+    """SSE streaming endpoint — same contract as /webchat/{tid}/message but
+    pushes the reply tokens as they arrive from the LLM. Drops perceived latency
+    from ~4s to ~400ms (time to first token).
+
+    Stream events (one JSON per `data:` line):
+      {"type": "ready", "conversation_id": str}      — sent immediately
+      {"type": "chunk", "text": str}                 — reply text deltas (progressive)
+      {"type": "done",  "reply": str, "follow_up": str|None, "cards": list, "conversation_id": str}
+      {"type": "error", "error": str}                — on failure
+    """
+    import json as _json
+    from ai.orchestrator import generate_response_stream
+    from ai.analyze import analyze_message
+    from ai.retrieval import retrieve
+    from fastapi.responses import StreamingResponse
+
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(404, "Tenant não encontrado")
+    inbound.channel = "webchat"
+    default_lang = tenant.get("default_language", "pt")
+
+    # Find / create conversation (same logic as _process_inbound, but inline so we
+    # can stream while writing to DB in the background).
+    convo = await db.conversations.find_one(
+        {"tenant_id": tenant_id, "channel": "webchat",
+         "external_user_id": inbound.external_user_id,
+         "status": {"$ne": "closed"}}, {"_id": 0})
+    if not convo:
+        convo = {
+            "id": new_id(), "tenant_id": tenant_id,
+            "channel": "webchat", "external_user_id": inbound.external_user_id,
+            "contact_name": inbound.contact_name or inbound.external_user_id,
+            "agent_id": inbound.agent_id, "status": "open",
+            "tags": [], "messages_count": 0,
+            "last_message": inbound.text, "last_message_at": now_iso(),
+            "created_at": now_iso(),
+        }
+        await db.conversations.insert_one(convo.copy())
+    conv_id = convo["id"]
+    agent_id = inbound.agent_id or convo.get("agent_id")
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": tenant_id}, {"_id": 0}) if agent_id else None
+    if not agent:
+        async def _err_no_agent():
+            yield f"data: {_json.dumps({'type':'error','error':'Agente não encontrado'})}\n\n"
+        return StreamingResponse(_err_no_agent(), media_type="text/event-stream")
+
+    ok, err = _agent_is_configured(agent)
+    if not ok:
+        async def _err_cfg():
+            yield f"data: {_json.dumps({'type':'error','error':err})}\n\n"
+        return StreamingResponse(_err_cfg(), media_type="text/event-stream")
+
+    user_msg = {
+        "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
+        "sender": "user", "sender_name": inbound.contact_name or "Cliente",
+        "text": inbound.text, "cards": [], "meta": {"channel": "webchat"},
+        "created_at": now_iso(),
+    }
+    await db.messages.insert_one(user_msg.copy())
+    await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": user_msg})
+
+    session = f"conv-{conv_id}"
+    ap, ak = agent.get("api_provider", "openai"), agent.get("api_key", "")
+
+    async def event_gen():
+        # Send ready event immediately so the UI can hide typing indicator on first token
+        yield f"data: {_json.dumps({'type':'ready','conversation_id':conv_id})}\n\n"
+        try:
+            analyze_task = analyze_message(inbound.text, "webchat", session, ap, ak)
+            retrieve_task = retrieve(db, tenant_id, inbound.text, k=6, source_ids=agent.get("data_source_ids") or None)
+            history_task = db.messages.find({"conversation_id": conv_id}, {"_id": 0}).sort("created_at", 1).to_list(20)
+            (intent, structure), retrieved, history = await asyncio.gather(
+                analyze_task, retrieve_task, history_task,
+            )
+            decision = decide_actions(intent, structure, agent)
+            lang = _detect(inbound.text, agent.get("default_language", default_lang))
+
+            full_reply = ""; full_follow = None; full_cards = []
+            async for evt in generate_response_stream(agent, history, intent, structure, retrieved, lang, session):
+                if evt["type"] == "chunk":
+                    yield f"data: {_json.dumps({'type':'chunk','text':evt['text']})}\n\n"
+                elif evt["type"] == "done":
+                    full_reply = evt.get("reply", "")
+                    full_follow = evt.get("follow_up")
+                    full_cards = evt.get("cards", [])
+                    yield f"data: {_json.dumps({'type':'done','reply':full_reply,'follow_up':full_follow,'cards':full_cards,'conversation_id':conv_id})}\n\n"
+
+            # Persist AI message (after stream completes)
+            ai_msg = {
+                "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
+                "sender": "ai", "sender_name": agent.get("name", "AI"),
+                "text": full_reply, "cards": full_cards,
+                "meta": {"intent": intent, "language": lang, "streamed": True},
+                "created_at": now_iso(),
+            }
+            await db.messages.insert_one(ai_msg.copy())
+            await db.conversations.update_one(
+                {"id": conv_id},
+                {"$set": {"last_message": full_reply, "last_message_at": now_iso()},
+                 "$inc": {"messages_count": 2}},
+            )
+            await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
+
+            # Background: actions + CRM qualification (matches non-streaming flow)
+            full_history_snapshot = history + [{"sender": "user", "text": inbound.text},
+                                               {"sender": "ai", "text": full_reply}]
+            if full_follow:
+                full_history_snapshot.append({"sender": "ai", "text": full_follow})
+
+            async def _bg():
+                try:
+                    action_results = await execute_actions(db, tenant_id, conv_id, decision.get("actions", []))
+                    q = await qualify_conversation(full_history_snapshot, session, ap, ak)
+                    q["updated_at"] = now_iso()
+                    await db.conversations.update_one(
+                        {"id": conv_id},
+                        {"$set": {"qualification": q, "tags": q.get("tags", [])}},
+                    )
+                    for a in action_results:
+                        if a.get("tool") == "create_lead" and a.get("ok"):
+                            await db.leads.update_one(
+                                {"id": a["id"]},
+                                {"$set": {"tags": q.get("tags", []), "qualification_status": q["status"]}},
+                            )
+                            await _notify_new_lead(tenant_id, a["id"], agent)
+                    await ws_manager.broadcast(tenant_id, {"type": "conversation_update", "conversation_id": conv_id})
+                except Exception as e:
+                    logger.warning(f"bg stream actions failed: {e}")
+            asyncio.create_task(_bg())
+
+        except Exception as e:
+            logger.exception(f"webchat_stream failed: {e}")
+            yield f"data: {_json.dumps({'type':'error','error':str(e)[:200]})}\n\n"
+
+    return StreamingResponse(
+        event_gen(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",  # disables nginx proxy buffering
+            "Connection": "keep-alive",
+        },
+    )
+
+
 @api.post("/inbound/simulate")
 async def simulate_inbound(inbound: InboundMessage, claims=Depends(current_user)):
     return await _process_inbound(claims["tenant_id"], inbound, agent_id=inbound.agent_id)
