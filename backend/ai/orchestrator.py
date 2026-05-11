@@ -8,10 +8,11 @@ logger = logging.getLogger(__name__)
 
 
 def _retrieved_to_cards(retrieved: List[dict], limit: int = 3) -> List[dict]:
-    """Builds cards directly from retrieved items metadata (failure-safe fallback)."""
+    """Builds cards directly from retrieved items metadata (failure-safe fallback).
+    Supports both internal `kind=item` (portfolio) and `kind=external_item` (3rd-party feeds)."""
     out = []
     for d in retrieved or []:
-        if d.get("kind") != "item":
+        if d.get("kind") not in {"item", "external_item"}:
             continue
         meta = d.get("meta") or {}
         if not meta.get("title"):
@@ -31,6 +32,10 @@ def _retrieved_to_cards(retrieved: List[dict], limit: int = 3) -> List[dict]:
             except (TypeError, ValueError): pass
         if isinstance(meta.get("features"), list):
             card["features"] = [str(f)[:40] for f in meta["features"][:5]]
+        # Mark external cards (3rd-party feeds)
+        if d.get("kind") == "external_item" or meta.get("external"):
+            card["external"] = True
+            card["source_label"] = meta.get("feed_name") or "Parceiro externo"
         out.append(card)
         if len(out) >= limit:
             break
@@ -131,12 +136,34 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
 
 INSTRUÇÕES (CRÍTICO):
-- IDIOMA: responde no mesmo idioma do cliente (detectado: {reply_lang}; se pt → pt-PT, NUNCA pt-BR).
+- 🌍 IDIOMA OBRIGATÓRIO: o cliente está a falar em "{reply_lang}".
+  • Se "{reply_lang}" = "pt" → responde em Português Europeu (NUNCA pt-BR).
+  • Se "{reply_lang}" = "en" → responde APENAS em English.
+  • Se "{reply_lang}" = "fr" → responde APENAS em Français.
+  • Se "{reply_lang}" = "de" → responde APENAS em Deutsch.
+  • Se "{reply_lang}" = "es" → responde APENAS en Español.
+  • Se "{reply_lang}" = "nl" → responde APENAS in Nederlands.
+  ⚠️ NUNCA mistures idiomas. NUNCA respondas em PT se o cliente escreveu noutro idioma.
+- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO:
+  O cliente vê o cartão automaticamente com os valores. NÃO peças mais dados.
+  Comenta brevemente o resultado (1 frase) e propõe próximo passo (visita / falar com banco / ver outros imóveis).
 - FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
 - MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão. Sem parágrafos.
 - "use_items" é uma lista com os números [1..N] dos imóveis que queres mostrar como cards. Lista vazia [] se nenhum encaixa.
 - NÃO copies título/preço/link no reply — eles aparecem nos cards automaticamente.
 - "reply" e "follow_up" devem ser conversacionais, NUNCA listas de imóveis.
+
+⚠️ ATENÇÃO MÁXIMA — IDIOMA DA RESPOSTA:
+Antes de escrever a resposta, identifica o idioma da ÚLTIMA mensagem do utilizador
+(que está marcada como "USER:" no histórico). Responde EXCLUSIVAMENTE nesse idioma.
+- "Hello" / "How much" → English
+- "Bonjour" / "Combien" → Français
+- "Guten Tag" / "Wie viel" → Deutsch
+- "Hola" / "Cuánto" → Español
+- "Hallo" / "Hoeveel" → Nederlands
+- "Olá" / "Quanto" → Português Europeu (NUNCA pt-BR)
+
+NÃO RESPONDAS EM PORTUGUÊS SE A ÚLTIMA MENSAGEM ESTÁ NOUTRO IDIOMA.
 
 EXEMPLO:
 Cliente: "Quero T2 em Lagos"
@@ -359,12 +386,34 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
 
 INSTRUÇÕES (CRÍTICO):
-- IDIOMA: responde no mesmo idioma do cliente (detectado: {reply_lang}; se pt → pt-PT, NUNCA pt-BR).
+- 🌍 IDIOMA OBRIGATÓRIO: o cliente está a falar em "{reply_lang}".
+  • Se "{reply_lang}" = "pt" → responde em Português Europeu (NUNCA pt-BR).
+  • Se "{reply_lang}" = "en" → responde APENAS em English.
+  • Se "{reply_lang}" = "fr" → responde APENAS em Français.
+  • Se "{reply_lang}" = "de" → responde APENAS em Deutsch.
+  • Se "{reply_lang}" = "es" → responde APENAS en Español.
+  • Se "{reply_lang}" = "nl" → responde APENAS in Nederlands.
+  ⚠️ NUNCA mistures idiomas. NUNCA respondas em PT se o cliente escreveu noutro idioma.
+- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO:
+  O cliente vê o cartão automaticamente com os valores. NÃO peças mais dados.
+  Comenta brevemente o resultado (1 frase) e propõe próximo passo (visita / falar com banco).
 - FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
 - EMITE O CAMPO "reply" PRIMEIRO (antes de follow_up e use_items) — isto é OBRIGATÓRIO.
 - MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão.
 - "use_items" é uma lista [1..N] dos imóveis para mostrar como cards. Lista vazia [] se nenhum encaixa.
 - NÃO copies título/preço/link no reply — eles aparecem nos cards automaticamente.
+
+⚠️ ATENÇÃO MÁXIMA — IDIOMA DA RESPOSTA:
+Antes de escrever a resposta, identifica o idioma da ÚLTIMA mensagem do utilizador
+(que está marcada como "USER:" no histórico). Responde EXCLUSIVAMENTE nesse idioma.
+- "Hello" / "How much" → English
+- "Bonjour" / "Combien" → Français
+- "Guten Tag" / "Wie viel" → Deutsch
+- "Hola" / "Cuánto" → Español
+- "Hallo" / "Hoeveel" → Nederlands
+- "Olá" / "Quanto" → Português Europeu (NUNCA pt-BR)
+
+NÃO RESPONDAS EM PORTUGUÊS SE A ÚLTIMA MENSAGEM ESTÁ NOUTRO IDIOMA.
 """
 
     turns = []

@@ -33,6 +33,13 @@ from ai.router import test_connection as llm_test_connection, LLMConfigMissing, 
 from email_service import send_email, render_lead_email
 from ws_manager import manager as ws_manager
 from webhooks import build_router as build_webhooks_router
+from ai.finance import (
+    detect_finance_intent, extract_price_from_text,
+    calcular_prestacao, format_simulation_pt,
+)
+from ai.lead_score import compute_lead_score
+import follow_up as follow_up_module
+import property_feed as property_feed_module
 
 from langdetect import detect as detect_lang, DetectorFactory
 DetectorFactory.seed = 0
@@ -72,10 +79,31 @@ async def _notify_new_lead(tenant_id: str, lead_id: str, agent: dict) -> None:
     if not lead:
         return
     html = render_lead_email(lead)
-    subject = f"Novo lead · {lead.get('name', '')}"
+    score = lead.get("score") or 0
+    tier_icon = "🔥" if score >= 70 else ("🌡️" if score >= 40 else "❄️")
+    subject = f"{tier_icon} Novo lead · {lead.get('name', '')} (score {score})"
     result = send_email(email_cfg, to, subject, html)
     logger.info(f"Lead email notify {lead_id} → {to}: {result}")
     await db.leads.update_one({"id": lead_id}, {"$set": {"email_notified": bool(result.get("ok"))}})
+
+
+async def _recompute_lead_score(lead_id: str) -> None:
+    """Recalcula o score 0-100 de um lead com base na conversa associada."""
+    lead = await db.leads.find_one({"id": lead_id}, {"_id": 0})
+    if not lead:
+        return
+    convo = None
+    history = []
+    if lead.get("conversation_id"):
+        convo = await db.conversations.find_one({"id": lead["conversation_id"]}, {"_id": 0})
+        history = await db.messages.find(
+            {"conversation_id": lead["conversation_id"]}, {"_id": 0}
+        ).sort("created_at", 1).to_list(50)
+    res = compute_lead_score(convo, lead, history)
+    await db.leads.update_one(
+        {"id": lead_id},
+        {"$set": {"score": res["score"], "score_tier": res["tier"], "score_signals": res["signals"]}},
+    )
 
 
 # ======================== AUTH ========================
@@ -1012,10 +1040,56 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
     decision = decide_actions(intent, structure, agent)
     lang = _detect(inbound.text, agent.get("default_language", default_lang))
 
+    # ===== Financial simulation hook =====
+    # If the user is asking about mortgage/credit AND we can detect a price in
+    # the current message or previous turn, run the simulation server-side and
+    # inject it into the LLM context so Maria can speak about the actual numbers.
+    finance_card = None
+    if detect_finance_intent(inbound.text):
+        price = extract_price_from_text(inbound.text)
+        if not price:
+            for m in reversed(history):
+                price = extract_price_from_text(m.get("text") or "")
+                if price:
+                    break
+        if price and price > 10000:
+            try:
+                sim = calcular_prestacao(price)
+                finance_card = {
+                    "type": "finance_simulation",
+                    "title": f"Simulação · {price:,.0f} €".replace(",", " "),
+                    "prestacao_mensal": sim["prestacao_mensal"],
+                    "entrada": sim["entrada"],
+                    "montante": sim["montante_credito"],
+                    "prazo_anos": sim["prazo_anos"],
+                    "taxa_total_pct": sim["taxa_total_pct"],
+                    "text": format_simulation_pt(sim),
+                }
+                # Inject into retrieved as a text chunk so the LLM can reason about it
+                retrieved = (retrieved or []) + [{
+                    "kind": "knowledge",
+                    "text": (
+                        f"SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora: "
+                        f"Imóvel {sim['valor_imovel']:.0f}€, entrada {sim['entrada_pct']:.0f}% "
+                        f"({sim['entrada']:.0f}€), montante {sim['montante_credito']:.0f}€ a {sim['prazo_anos']} anos. "
+                        f"Taxa {sim['taxa_total_pct']:.2f}% (Euribor + Spread). "
+                        f"PRESTAÇÃO MENSAL: {sim['prestacao_mensal']:.2f}€. "
+                        f"Total pago: {sim['total_pago']:.0f}€, juros: {sim['juros_totais']:.0f}€."
+                    ),
+                    "meta": {"topic": "simulacao_credito_live"},
+                }]
+            except Exception as e:
+                logger.warning(f"finance simulation failed: {e}")
+
     try:
         resp = await generate_response(agent, history, intent, structure, retrieved, lang, session)
     except (LLMConfigMissing, LLMProviderError) as e:
         resp = {"reply": str(e), "cards": [], "language": lang}
+
+    # Attach the structured finance card if computed
+    if finance_card:
+        resp.setdefault("cards", [])
+        resp["cards"] = [finance_card] + list(resp.get("cards") or [])
 
     # Fire create_lead/create_ticket in the background — the user doesn't need
     # to wait for DB inserts and SMTP delivery before seeing the AI's reply.
@@ -1074,6 +1148,12 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
                         {"id": a["id"]},
                         {"$set": {"tags": new_tags, "qualification_status": q["status"]}},
                     )
+                    # Recompute deterministic 0-100 lead score now that we have
+                    # the full history + qualification snapshot
+                    try:
+                        await _recompute_lead_score(a["id"])
+                    except Exception as e:
+                        logger.warning(f"lead score failed: {e}")
                     await _notify_new_lead(tenant_inner, a["id"], agent_inner)
             await ws_manager.broadcast(
                 tenant_inner,
@@ -1153,6 +1233,9 @@ async def webchat_book_visit(tenant_id: str, payload: dict = Body(...)):
         "source": "webchat-visit",
         "stage": "qualified",
         "score": 85,  # Strong intent — booked a viewing
+        "score_tier": "quente",
+        "score_signals": ["Visita marcada", "Nome partilhado", "Email partilhado",
+                          "Telefone partilhado" if phone else None],
         "tags": ["visita-marcada"] + (["imobiliária"] if property_title else []),
         "notes": (
             f"📅 Visita marcada para {date}{' às ' + time_ if time_ else ''}\n"
@@ -1954,6 +2037,88 @@ window.addEventListener("load", function(){{
     return HTMLResponse(html, headers={"Cache-Control": "public, max-age=300"})
 
 
+# ======================== EXTERNAL PROPERTY FEEDS ========================
+@api.get("/agents/{agent_id}/feeds")
+async def list_agent_feeds(agent_id: str, claims=Depends(current_user)):
+    """Lista os feeds externos configurados num agente."""
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0},
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    feeds = (agent.get("config") or {}).get("external_feeds") or []
+    # Stats por feed
+    out = []
+    for f in feeds:
+        key = f"external-feed:{agent_id}:{(f.get('url') or '')[:60]}"
+        src = await db.data_sources.find_one({"source_key": key}, {"_id": 0})
+        out.append({
+            **f,
+            "items": (src or {}).get("items", 0),
+            "indexed_at": (src or {}).get("indexed_at"),
+        })
+    return {"feeds": out, "follow_up_enabled": (agent.get("config") or {}).get("follow_up_enabled", True)}
+
+
+@api.put("/agents/{agent_id}/feeds")
+async def set_agent_feeds(agent_id: str, payload: dict = Body(...), claims=Depends(current_user)):
+    """Substitui a lista de feeds externos.
+    Body: {feeds: [{type: 'csv'|'xml'|'gsheet', url, name}], follow_up_enabled?: bool}"""
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0},
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    feeds_in = payload.get("feeds") or []
+    if not isinstance(feeds_in, list):
+        raise HTTPException(400, "feeds deve ser uma lista")
+    feeds_clean = []
+    for f in feeds_in:
+        if not isinstance(f, dict) or not f.get("url"):
+            continue
+        ftype = (f.get("type") or "csv").lower()
+        if ftype not in {"csv", "xml", "gsheet"}:
+            ftype = "csv"
+        feeds_clean.append({
+            "type": ftype,
+            "url": str(f["url"])[:1000],
+            "name": str(f.get("name") or "")[:120],
+        })
+    update_set = {"config.external_feeds": feeds_clean, "updated_at": now_iso()}
+    if "follow_up_enabled" in payload:
+        update_set["config.follow_up_enabled"] = bool(payload["follow_up_enabled"])
+    await db.agents.update_one({"id": agent_id}, {"$set": update_set})
+    return {"ok": True, "feeds": feeds_clean}
+
+
+@api.post("/agents/{agent_id}/feeds/refresh")
+async def refresh_agent_feeds(agent_id: str, claims=Depends(current_user)):
+    """Força refresh imediato dos feeds externos deste agente."""
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0},
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    feeds = (agent.get("config") or {}).get("external_feeds") or []
+    results = []
+    for f in feeds:
+        r = await property_feed_module.index_external_feed(
+            db, claims["tenant_id"], agent_id, f,
+        )
+        results.append({"url": f.get("url"), **r})
+    return {"results": results}
+
+
+# ======================== FOLLOW-UP MANUAL TICK ========================
+@api.post("/agents/follow-up/tick")
+async def run_followup_now(claims=Depends(current_user)):
+    """Endpoint manual para correr o tick de follow-up imediatamente (debug/QA)."""
+    if claims.get("role") not in {"owner", "admin"}:
+        raise HTTPException(403, "Sem permissão")
+    stats = await follow_up_module.run_followup_tick(db)
+    return {"ok": True, **stats}
+
+
 # ======================== ROOT ========================
 @api.get("/")
 async def root():
@@ -1985,3 +2150,16 @@ async def _startup_bootstrap():
     Idempotent — does nothing if data already exists."""
     from bootstrap import bootstrap
     await bootstrap(db)
+
+
+@app.on_event("startup")
+async def _startup_schedulers():
+    """Arranca os schedulers em background:
+       - WhatsApp follow-up automático (tick cada 10 min)
+       - Property feed refresh (semanal)
+    Desativável via env DISABLE_SCHEDULERS=1 (útil em testes)."""
+    if os.environ.get("DISABLE_SCHEDULERS") == "1":
+        logger.info("Schedulers disabled via DISABLE_SCHEDULERS=1")
+        return
+    asyncio.create_task(follow_up_module.scheduler_loop(db, interval_seconds=600))
+    asyncio.create_task(property_feed_module.scheduler_loop(db, interval_seconds=7 * 24 * 3600))

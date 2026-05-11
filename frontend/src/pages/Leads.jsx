@@ -173,10 +173,21 @@ const Leads = () => {
                     </select>
                   </td>
                   <td className="p-4">
-                    <div className="w-20 h-1.5 bg-[#E5EAF2] rounded-full overflow-hidden">
-                      <div className="h-full bg-[#0069FE]" style={{ width: `${l.score}%` }} />
-                    </div>
-                    <span className="text-[10px] text-[#5B6B82]">{l.score}</span>
+                    {(() => {
+                      const tier = l.score_tier || (l.score >= 70 ? "quente" : l.score >= 40 ? "morno" : "frio");
+                      const tierColor = tier === "quente" ? "#DC2626" : tier === "morno" ? "#F59E0B" : "#94A3B8";
+                      const tierIcon = tier === "quente" ? "🔥" : tier === "morno" ? "🌡️" : "❄️";
+                      return (
+                        <div title={(l.score_signals || []).join(" · ")}>
+                          <div className="w-20 h-1.5 bg-[#E5EAF2] rounded-full overflow-hidden">
+                            <div className="h-full" style={{ width: `${l.score}%`, background: tierColor }} />
+                          </div>
+                          <span className="text-[10px] font-semibold" style={{ color: tierColor }}>
+                            {tierIcon} {l.score} · {tier}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   <td className="p-4">
                     {l.crm_synced

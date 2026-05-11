@@ -95,6 +95,18 @@
 .card .actions button.book{background:var(--user);color:#fff}
 .card .actions button.book:hover{filter:brightness(.92)}
 .card .actions a + button{border-left:1px solid #EEF1F7}
+.card .badge-ext{position:absolute;bottom:11px;left:11px;background:rgba(228,172,30,.95);color:#fff;padding:3px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;box-shadow:0 2px 6px rgba(11,19,36,.18)}
+.finance-card{background:linear-gradient(135deg,#fff 0%,#F4F7FB 100%);max-width:320px}
+.finance-card .b{padding:18px 18px 16px}
+.finance-card .t{font-size:15px;color:#0B1324;font-weight:700;margin-bottom:14px;letter-spacing:-.01em}
+.finance-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;margin-bottom:14px}
+.finance-grid .fg-row{display:flex;flex-direction:column;font-size:12px}
+.finance-grid .fg-row span{color:#5B6B82;font-weight:500;margin-bottom:2px}
+.finance-grid .fg-row b{color:#0B1324;font-weight:700;font-size:13px}
+.finance-highlight{background:var(--brand);color:#fff;border-radius:14px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;box-shadow:0 4px 14px rgba(0,105,254,.22)}
+.finance-highlight span{font-size:12px;opacity:.9;font-weight:500}
+.finance-highlight strong{font-size:18px;font-weight:800;letter-spacing:-.02em}
+.finance-note{font-size:10.5px;color:#8593A8;margin-top:10px;font-style:italic;text-align:center}
 
 /* Visit booking modal */
 .cp-modal-bg{position:absolute;inset:0;background:rgba(11,19,36,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:100;animation:fadeIn .2s}
@@ -198,8 +210,32 @@ function botMsg(text, icebreakers, cards, opts) {
     allCards.forEach(c => {
       const card = document.createElement("div");
       card.className = "card";
+      // ===== Special card: financial simulation =====
+      if (c.type === "finance_simulation") {
+        card.className = "card finance-card";
+        const html = (
+          '<div class="b">'
+          + '<div class="t">🧮 ' + (c.title || "Simulação de crédito") + '</div>'
+          + '<div class="finance-grid">'
+          +   '<div class="fg-row"><span>Entrada</span><b>' + Number(c.entrada).toLocaleString('pt-PT') + ' €</b></div>'
+          +   '<div class="fg-row"><span>Montante</span><b>' + Number(c.montante).toLocaleString('pt-PT') + ' €</b></div>'
+          +   '<div class="fg-row"><span>Prazo</span><b>' + c.prazo_anos + ' anos</b></div>'
+          +   '<div class="fg-row"><span>Taxa</span><b>' + Number(c.taxa_total_pct).toFixed(2) + '%</b></div>'
+          + '</div>'
+          + '<div class="finance-highlight">'
+          +   '<span>Prestação mensal</span>'
+          +   '<strong>' + Number(c.prestacao_mensal).toLocaleString('pt-PT', {minimumFractionDigits: 2, maximumFractionDigits: 2}) + ' €</strong>'
+          + '</div>'
+          + '<div class="finance-note">Valores estimados · Sujeitos a aprovação bancária</div>'
+          + '</div>'
+        );
+        card.innerHTML = html;
+        carousel.appendChild(card);
+        return;
+      }
       const tagsHtml = (c.price ? '<span class="tag">' + c.price + '</span>' : '')
-        + (c.typology ? '<span class="badge-typ">' + c.typology + '</span>' : '');
+        + (c.typology ? '<span class="badge-typ">' + c.typology + '</span>' : '')
+        + (c.external ? '<span class="badge-ext" title="' + (c.source_label || 'Parceiro') + '">Parceiro</span>' : '');
       const imgHtml = c.image
         ? '<div class="imgwrap"><img src="' + c.image + '" referrerpolicy="no-referrer" loading="lazy" onerror="this.parentElement.classList.add(\'noimg\');this.remove()">' + tagsHtml + '</div>'
         : (tagsHtml ? '<div class="imgwrap noimg">' + tagsHtml + '</div>' : '');

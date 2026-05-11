@@ -125,7 +125,11 @@ def score_chunk(query_terms: List[str], chunk_text: str) -> float:
 
 async def retrieve(db, tenant_id: str, query: str, k: int = 6, source_ids: List[str] = None) -> List[dict]:
     """Keyword retrieval over the tenant's indexed chunks. If source_ids is provided,
-    only search those sources (per-agent retrieval)."""
+    only search those sources (per-agent retrieval).
+
+    Priority: internal `kind=item` first, then `knowledge`, then `external_item` (only
+    when internal items don't fill the slots). This ensures the agent shows the
+    agency's own portfolio before falling back to Idealista/Imovirtual feeds."""
     stop_pt = {"a", "o", "as", "os", "de", "do", "da", "em", "e", "ou", "no", "na", "um", "uma", "para", "por", "que", "com", "se", "é"}
     raw_terms = re.findall(r"[\w\u00C0-\u017F]+", query.lower())
     terms = [t for t in raw_terms if (len(t) >= 2 and t not in stop_pt)]
@@ -138,5 +142,35 @@ async def retrieve(db, tenant_id: str, query: str, k: int = 6, source_ids: List[
     docs = await cur.to_list(2000)
     scored = [(score_chunk(terms, d["text"]), d) for d in docs]
     scored = [s for s in scored if s[0] > 0]
-    scored.sort(key=lambda x: (-x[0], 0 if x[1].get("kind") == "item" else 1))
-    return [d for _, d in scored[:k]]
+
+    # Sort key: (kind_priority, -score)
+    # 0 = item (internal portfolio), 1 = knowledge, 2 = external_item (3rd-party feeds), 3 = text/other
+    def _kind_prio(d):
+        k = d.get("kind")
+        if k == "item":
+            return 0
+        if k == "knowledge":
+            return 1
+        if k == "external_item":
+            return 2
+        return 3
+
+    scored.sort(key=lambda x: (_kind_prio(x[1]), -x[0]))
+
+    # Count internal items
+    internal_items = [d for _, d in scored if d.get("kind") == "item"]
+    others = [d for _, d in scored if d.get("kind") != "external_item"]
+    externals = [d for _, d in scored if d.get("kind") == "external_item"]
+
+    # Fill: internal items first, then knowledge/text, then external items
+    # ONLY include external if internal items < 2 (i.e., portfolio doesn't have enough)
+    result = others[:k]
+    if len([d for d in result if d.get("kind") == "item"]) < 2 and externals:
+        # Add up to (k - len(result)) externals, ensuring at least 1 if portfolio is weak
+        slots_left = max(k - len(result), 1)
+        for e in externals[:slots_left]:
+            result.append(e)
+            if len(result) >= k:
+                break
+
+    return result[:k]

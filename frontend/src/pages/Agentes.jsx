@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { api } from "../lib/api";
 import { toast } from "sonner";
+import AgentAutomation from "../components/AgentAutomation";
 import {
   Bot, Trash2, Plus, Save, Sparkles, Database,
   KeyRound, CheckCircle2, AlertTriangle, MessageSquare, Send, X,
@@ -42,6 +43,7 @@ const TABS = [
   { k: "email", label: "Email", icon: Mail },
   { k: "install", label: "Instalação", icon: Code2 },
   { k: "data", label: "Fontes & Ferramentas", icon: Database },
+  { k: "automation", label: "Automação", icon: Zap },
   { k: "preview", label: "Pré-visualizar", icon: Eye },
 ];
 
@@ -824,6 +826,11 @@ const Agentes = () => {
                   </div>
                 </div>
               </div>
+            )}
+
+            {/* ======= AUTOMATION: Feeds + Follow-up ======= */}
+            {tab === "automation" && (
+              <AgentAutomation agentId={selected.id} />
             )}
 
             {/* ======= PREVIEW (simulated) ======= */}

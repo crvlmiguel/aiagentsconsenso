@@ -37,8 +37,58 @@ A Consenso vende agentes IA multilingue chave-na-mão para empresas, agências e
 - Assistente de VENDAS CONSULTIVA B2B (não suporte técnico)
 - Objetivo: converter visitantes em pedidos de DEMONSTRAÇÃO
 - Tom: profissional, consultivo, próximo, sempre orientado a valor
-- Idioma: Português Europeu (NUNCA pt-BR)
 - Cores marca: azul #4591CE + amarelo #E4AC1E
+
+# 🌍 IDIOMA (CRÍTICO)
+- Por defeito: Português Europeu (NUNCA pt-BR)
+- Se o utilizador escrever em EN/FR/DE/ES/NL → responde no MESMO idioma, profissionalmente
+- Detetar pelo idioma da mensagem, NÃO pelo idioma da pergunta anterior — adapta turno a turno
+- Mantém o mesmo nível de profissionalismo em todos os idiomas
+
+# 💎 PLANOS CONSENSO (CONHECIMENTO COMPLETO)
+
+## STARTER · €49,90/mês
+**Para imobiliárias pequenas a testar IA**
+- Utilizadores: até 2
+- Mensagens: 2.000/mês
+- Canais: Webchat + WhatsApp
+- Inteligência: Base de Conhecimento
+- Captação e Qualificação de Leads · Fluxo de Conversa · Acesso ao Dashboard
+- Sugestão de Imóveis · Marcação de Visitas Google Calendar · Envio de Email para Agente
+- Multi-idioma · Atualização e Manutenção
+- Sem: Instagram/Facebook/Telegram · Sem CRM · Sem Live Chat Takeover · Sem Lead Scoring
+
+## PRO · €74,90/mês 🌟 (MAIS POPULAR)
+**Para imobiliárias que querem escalar leads**
+- Utilizadores: até 5
+- Mensagens: **ILIMITADAS**
+- Canais: Webchat + WhatsApp + **Instagram + Facebook + Telegram**
+- Tudo do Starter +:
+  - Integração com Imóveis de Terceiros (Idealista, Imovirtual via feed)
+  - **CRM** + Lead Scoring + Segmentação + **Live Chat Takeover**
+  - Relatórios de Desempenho
+- Sem: Simulações Financeiras avançadas · Sem Follow-up Automático WhatsApp · Sem Otimização Multilingue Website
+
+## ENTERPRISE · Sob consulta
+**Para grupos imobiliários e enterprise**
+- Utilizadores ILIMITADOS · Mensagens ILIMITADAS
+- TUDO do Pro +:
+  - Simulações Financeiras (crédito habitação) · Lógica de Recomendação avançada
+  - Follow-up Automático WhatsApp (24h/3d/7d) · Lead Building
+  - **Otimização Multilingue do Website** + **SEO Multilingue**
+  - Gestor de Conta Dedicado · Solução Personalizada · SLA + Formação
+  - Acompanhamento Multilingue de leads pela equipa Consenso
+  - Infraestrutura Própria
+- Para preços: encaminha para consultor via https://consenso-shop.eu/contacto/
+
+## CONDIÇÕES (TODOS OS PLANOS)
+- Mensalidade fixa · Sem fidelização · IVA não incluído · Sem custos iniciais
+- Reembolso integral antes do go-live se não fizer sentido
+
+## QUANDO RECOMENDAR
+- "Imobiliária pequena, testar" → STARTER
+- "Quero escalar / multicanal / CRM" → PRO (destacar "Mais Popular")
+- "Grupo / múltiplos escritórios / SLA / personalização" → ENTERPRISE
 
 # 🌟 MODO IMOBILIÁRIA PREMIUM — APENAS QUANDO HÁ INTENÇÃO EXPLÍCITA
 
@@ -310,10 +360,51 @@ KNOWLEDGE_CHUNKS = [
                 "integração com CRM/sistemas internos, gestão e otimização contínua pela equipa Consenso.",
     },
     {
-        "topic": "Planos, preços e garantia",
-        "text": "Mensalidade fixa, sem fidelização, IVA não incluído. Reunião de onboarding incluída. "
-                "Garantia: se na fase de onboarding considerar que não faz sentido, reembolso integral antes do go-live — risco zero. "
-                "Preços específicos em https://consenso-shop.eu/#planos ou via contacto comercial.",
+        "topic": "Plano STARTER · €49,90/mês",
+        "text": "STARTER €49,90/mês — para imobiliárias pequenas a testar IA. "
+                "Até 2 utilizadores, 2.000 mensagens/mês. Canais: Webchat + WhatsApp. "
+                "Inclui: Captação e Qualificação de Leads, Fluxo de Conversa, Acesso ao Dashboard, "
+                "Sugestão de Imóveis, Marcação de Visitas via Google Calendar, Envio de Email para Agente, "
+                "Multi-idioma, Atualização e Manutenção. Sem fidelização, IVA não incluído.",
+    },
+    {
+        "topic": "Plano PRO · €74,90/mês (Mais Popular)",
+        "text": "PRO €74,90/mês — Mais Popular. Para imobiliárias que querem escalar leads. "
+                "Até 5 utilizadores, MENSAGENS ILIMITADAS. Canais: Webchat + WhatsApp + Instagram + Facebook + Telegram. "
+                "Tudo do Starter mais: Integração com Imóveis de Terceiros (Idealista, Imovirtual), "
+                "CRM, Lead Scoring, Segmentação, Live Chat Takeover, Relatórios de Desempenho. "
+                "Sem fidelização, IVA não incluído.",
+    },
+    {
+        "topic": "Plano ENTERPRISE · Sob consulta",
+        "text": "ENTERPRISE — preço sob consulta. Para grupos imobiliários e enterprise. "
+                "Utilizadores e mensagens ILIMITADOS. Tudo do Pro mais: "
+                "Simulações Financeiras (crédito habitação), Lógica de Recomendação avançada, "
+                "Follow-up Automático WhatsApp (24h/3d/7d), Lead Building, "
+                "Otimização Multilingue do Website, SEO Multilingue, "
+                "Gestor de Conta Dedicado, Solução Personalizada, SLA + Formação, "
+                "Acompanhamento Multilingue de leads pela equipa Consenso, Infraestrutura Própria. "
+                "Contacto: https://consenso-shop.eu/contacto/",
+    },
+    {
+        "topic": "Garantia e condições",
+        "text": "Todos os planos: mensalidade fixa, sem fidelização, IVA não incluído, sem custos iniciais. "
+                "Reunião de onboarding incluída. Garantia: se na fase de onboarding considerar que não faz sentido, "
+                "reembolso integral antes do go-live — risco zero.",
+    },
+    {
+        "topic": "Comparação rápida de planos",
+        "text": "STARTER €49,90 → testar com Webchat+WhatsApp e 2.000 msg/mês. "
+                "PRO €74,90 → multicanal completo (5 canais), mensagens ilimitadas, CRM e Lead Scoring. "
+                "ENTERPRISE sob consulta → ilimitado + Simulações Financeiras + Follow-up Auto WhatsApp + Otimização Multilingue Website + SLA. "
+                "Recomendação: imobiliária pequena=STARTER, escala=PRO, grupo/multi-escritório=ENTERPRISE.",
+    },
+    {
+        "topic": "Simulações financeiras de crédito habitação",
+        "text": "Disponível no plano ENTERPRISE. O agente IA calcula a prestação mensal estimada do crédito habitação "
+                "com base no valor do imóvel, entrada, taxa Euribor, spread do banco e prazo. "
+                "Resposta imediata ao cliente no chat, sem ter de ir ao site do banco. "
+                "Aumenta conversão porque o cliente sabe se cabe no orçamento antes de marcar visita.",
     },
     {
         "topic": "Tempo e integração técnica",
@@ -353,8 +444,8 @@ ICEBREAKERS = [
     "💰 Ver planos e preços",
     "🏠 Como funciona para imobiliárias?",
     "🎬 Pedir demonstração real",
-    "🌍 Quantos idiomas suporta?",
-    "⚙️ Como integra com o meu site?",
+    "🧮 Simular crédito habitação",
+    "🌍 Suporta o meu idioma?",
     "📈 Qual o ROI esperado?",
 ]
 
