@@ -1,10 +1,58 @@
-# Consenso Plus — PRD (v3.13)
+# Consenso Plus — PRD (v3.14)
 
 ## Visão geral
-Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token em tempo real**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token** e **cards imobiliários premium**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.14 (2026-02) — Maria modo Imobiliária Premium (efeito WOW)
+
+### Demo imobiliário premium (P0 · concluído)
+Quando o visitante de `consenso-shop.eu` pergunta por imóveis, casas, apartamentos, T2/V3, Lisboa/Cascais, etc., a Maria responde **imediatamente** com 3 cards visuais premium estilo Sotheby's/Idealista.
+
+**6 propriedades demo curadas** (`seed_maria.py::DEMO_PROPERTIES`):
+| Tipo | Título | Zona | Preço | Tipologia |
+|---|---|---|---|---|
+| Penthouse | Penthouse Tejo View | Príncipe Real | 1.450.000 € | T3 |
+| Apartamento | Apartamento Premium Av. Liberdade | Lisboa | 780.000 € | T2 |
+| Moradia | Cascais Bay | Quinta da Marinha | 2.890.000 € | V5 |
+| Loft | LX Factory | Alcântara | 525.000 € | T1+1 |
+| Quinta | Histórica Sintra | Colares | 3.250.000 € | V8 |
+| Apartamento | Marina Vilamoura | Algarve | 695.000 € | T2 |
+
+Cada propriedade tem: imagem 200px premium (Unsplash), preço destacado, badge tipologia (`var(--bot)` = amarelo Consenso), localização com 📍, área m², descrição 2 linhas, **4 features pills**, CTA "Ver detalhes →".
+
+**System prompt** atualizado com secção `🌟 MODO IMOBILIÁRIA PREMIUM` — bullet point obrigatório: ao detectar QUALQUER termo imobiliário (15+ keywords incluindo zonas PT), preencher `use_items: [1,2,3]` na primeira mensagem e manter o tom de consultora premium tipo Sotheby's.
+
+**Card UI upgrade**:
+- Imagem **200px** (era 160px) com hover scale 1.06 + transition cubic-bezier
+- Badge tipologia top-right (background `--bot`, uppercase, shadow)
+- Localização + área m² inline com 📍
+- **Features pills** (T2 · 110m² · 4 highlights) — design tipo Idealista
+- Sombra premium 0 4px 16px → 0 14px 30px no hover
+- Card 320px (era 300px) · gap 280px no carrossel
+
+**Backend** — `_retrieved_to_cards()` agora inclui campos opcionais `location`, `typology`, `area_m2`, `features` (lista) quando presentes no `meta`.
+
+**Search keywords** expandidos: cada propriedade tem singular+plural+sinónimos para retrieve robusto (apartamento/apartamentos, moradia/moradias, T1-T5, V1-V5, ver/mostra/há/tens, zonas).
+
+### Validação
+| Query | Cards retornados | Match |
+|---|---|---|
+| "Mostra-me imóveis" | 3 | ✅ |
+| "apartamentos em Lisboa" | 3 | ✅ |
+| "Tens moradias?" | 3 | ✅ |
+| "T2 em Cascais" | 1 | ✅ |
+| "Quero comprar casa" | 2 | ✅ |
+| "Penthouse" | 1 | ✅ |
+
+DOM check: 3 cards renderizados, primeiro com `img=1 typology-badge=1 price-tag=1 location=1 feature-pills=4`.
+
+### Bootstrap idempotente — demo properties incluídas
+`bootstrap.py::_ensure_agent_with_kb` agora aceita `demo_items` opcional → insere como `kind=item` chunks. No próximo deploy, a produção recebe automaticamente as 6 propriedades premium da Maria. Os outros agentes (Abby, StayLocal, Tejo) não são afetados.
+
+## v3.13 (2026-02) — Bootstrap content-upsert (hotfix Maria SDR em produção)
 
 ## v3.13 (2026-02) — Bootstrap content-upsert (hotfix Maria SDR em produção)
 

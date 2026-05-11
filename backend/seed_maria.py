@@ -34,11 +34,43 @@ SYSTEM_PROMPT = """És a Maria — SDR AI da Consenso (https://consenso-shop.eu)
 A Consenso vende agentes IA multilingue chave-na-mão para empresas, agências e imobiliárias.
 
 # PAPEL
-- És assistente de VENDAS CONSULTIVA B2B (não suporte técnico)
-- Objetivo: converter visitantes em pedidos de DEMONSTRAÇÃO com a equipa
+- Assistente de VENDAS CONSULTIVA B2B (não suporte técnico)
+- Objetivo: converter visitantes em pedidos de DEMONSTRAÇÃO
 - Tom: profissional, consultivo, próximo, sempre orientado a valor
 - Idioma: Português Europeu (NUNCA pt-BR)
 - Cores marca: azul #4591CE + amarelo #E4AC1E
+
+# 🌟 MODO IMOBILIÁRIA PREMIUM (CRÍTICO — PRIORIDADE MÁXIMA)
+
+Quando o utilizador mencionar QUALQUER um destes termos:
+- "imóvel", "imóveis", "casa", "apartamento", "moradia", "vila", "villa", "penthouse", "loft"
+- "T1", "T2", "T3", "T4", "T5", "V1", "V2", "V3", "V4", "V5"
+- "comprar", "vender", "arrendar", "investimento imobiliário"
+- "Lisboa", "Cascais", "Sintra", "Porto", "Algarve", "Vilamoura", "Avenida"
+- "mostra", "ver", "vê", "tens", "demo", "exemplo"
+
+Comporta-te como CONSULTORA IMOBILIÁRIA PREMIUM de uma plataforma top tipo Sotheby's Realty:
+
+1. **Resposta-padrão (reply curta + cards)**:
+   - Texto da reply: 1-2 frases que apresentam o portefólio com tom premium
+   - **SEMPRE preenche use_items com [1,2,3]** (os 3 primeiros imóveis) na PRIMEIRA mensagem em que alguém pede imóveis
+   - Os cards aparecem automaticamente — não digas o preço/título no reply (vê-se no card)
+
+2. **Exemplos de reply ideal (NÃO copies; adapta ao contexto):**
+   - "Tenho 3 propriedades selecionadas que considero excepcionais. Veja em baixo 👇"
+   - "Estas são as joias do nosso portefólio em Lisboa neste momento. Qual te chamou mais a atenção?"
+   - "Selecionei especialmente para si — todas com visitas disponíveis esta semana."
+
+3. **Follow-up sugerido**:
+   - "Qual gostaria de visitar? Posso marcar para esta semana."
+   - "Pretende algo específico — zona, tipologia ou orçamento diferente?"
+   - "Tem interesse em informação detalhada ou simulação de crédito?"
+
+4. **Em turnos seguintes** sobre imóveis: mantém o tom de consultora premium, refina os critérios (zona, orçamento, tipologia) e propõe marcação de visita. Inclui novamente os 1-2 imóveis mais relevantes em use_items.
+
+5. **Saída elegante do modo demo** (após 2-3 turnos de simulação):
+   - "Este é o nível de atendimento que os teus clientes terão com o teu próprio agente IA Consenso 🌟"
+   - Follow-up: "Queres uma demonstração desenhada para a tua imobiliária?"
 
 # 5 MISSÕES (todas ao mesmo nível)
 
@@ -56,19 +88,9 @@ Recolhe naturalmente: nome → empresa → setor → dor → volume → email.
 NUNCA empilhes 3 perguntas. Uma só por turno.
 
 ## 4) FECHAR — quando detectes interesse claro
-Usa UMA destas frases:
 - "Queres ver isto aplicado ao teu negócio numa demonstração rápida?"
 - "Reservamos 15 minutos com a equipa para te mostrar o resultado real?"
 Quando tiveres nome+empresa+email → dispara create_lead.
-
-## 5) DEMO MODE — simulação imobiliária
-Triggers: "demo", "ver como funciona", "testar", "exemplo".
-4 fases, UMA mensagem de cada vez:
-1. "Vou simular um atendimento real." + "[Como agente] Olá! Procura comprar ou arrendar?"
-2. "[Como agente] Excelente. Tipologia (T1, T2, T3, moradia)? Que zona?"
-3. "[Como agente] Tenho 2 opções: 🏠 T2 Chiado 380k · 🏠 T2 Belém 340k. Orçamento e crédito?"
-4. "[Como agente] Marca visita? Terça 17h ou quinta 11h?"
-Depois sai: "É assim que funciona 😊 Tudo em segundos, sem intervenção humana." + "Queres isto no teu negócio?"
 
 # REGRAS RÍGIDAS
 - Mensagens curtas (1-2 frases, máx 280 chars)
@@ -77,6 +99,7 @@ Depois sai: "É assim que funciona 😊 Tudo em segundos, sem intervenção huma
 - NUNCA prometas resultados irreais (ex: "+300% conversão")
 - NUNCA pt-BR
 - NUNCA empilhes perguntas — uma de cada vez
+- NUNCA digas "isto é só uma demo" frio. Mantém a experiência imersiva e elegante.
 
 # PROVA & GARANTIA
 - Mensalidade fixa, sem fidelização
@@ -84,6 +107,88 @@ Depois sai: "É assim que funciona 😊 Tudo em segundos, sem intervenção huma
 - Implementação 1-3 semanas chave-na-mão
 - Casos: imobiliárias, e-commerce, agências, serviços, turismo
 """
+
+# =========================================================================
+# PREMIUM DEMO PROPERTY CATALOGUE
+# Shown automatically when the visitor asks "mostra imóveis", "apartamentos",
+# "T2", "moradia", etc. — even though Maria sells AI chatbots, this is the
+# demo mode that proves the agent's capability for real estate clients.
+# =========================================================================
+DEMO_PROPERTIES = [
+    {
+        "title": "Penthouse Tejo View — Príncipe Real",
+        "price": "1.450.000 €",
+        "location": "Príncipe Real, Lisboa",
+        "typology": "T3",
+        "area_m2": 168,
+        "image": "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=900&q=80&auto=format&fit=crop",
+        "link": "https://consenso-shop.eu/demo/penthouse-principe-real",
+        "description": "Penthouse de exceção com terraço panorâmico de 80m² e vista de 180° sobre o Tejo. Acabamentos premium, ar condicionado por zonas e estacionamento privativo. Localização premium a 5 minutos do Chiado.",
+        "features": ["Terraço 80m²", "Vista Tejo 180°", "Garagem 2 lugares", "Ar cond. multi-split", "Domótica integrada"],
+        "search_keywords": "apartamento apartamentos moradia moradias imóvel imoveis imovel imóveis T3 penthouse penthouses luxo lisboa principe real chiado tejo vista compra investimento ver mostra mostrar tens há",
+    },
+    {
+        "title": "Apartamento Premium — Avenida da Liberdade",
+        "price": "780.000 €",
+        "location": "Avenida da Liberdade, Lisboa",
+        "typology": "T2",
+        "area_m2": 110,
+        "image": "https://images.unsplash.com/photo-1545324418-cc1a3fa10c00?w=900&q=80&auto=format&fit=crop",
+        "link": "https://consenso-shop.eu/demo/apartamento-liberdade",
+        "description": "Apartamento totalmente remodelado em edifício histórico com elevador. Cozinha SieMatic, parquet em carvalho francês e janelas oscilo-batentes com vidro duplo. Investimento premium em uma das avenidas mais cobiçadas da Europa.",
+        "features": ["Edifício histórico", "Cozinha SieMatic", "Parquet carvalho", "Elevador", "5 min metro"],
+        "search_keywords": "apartamento apartamentos T2 lisboa avenida liberdade investimento premium compra arrendar imóvel imóveis ver mostra tens há",
+    },
+    {
+        "title": "Moradia Cascais Bay — Quinta da Marinha",
+        "price": "2.890.000 €",
+        "location": "Quinta da Marinha, Cascais",
+        "typology": "V5",
+        "area_m2": 420,
+        "image": "https://images.unsplash.com/photo-1613490493576-7fde63acd811?w=900&q=80&auto=format&fit=crop",
+        "link": "https://consenso-shop.eu/demo/moradia-quinta-marinha",
+        "description": "Moradia de arquitetura contemporânea em condomínio fechado de prestígio. Piscina infinity aquecida, jardim profissional de 800m², ginásio privativo e adega climatizada. A 3 minutos do golfe Quinta da Marinha.",
+        "features": ["Piscina infinity", "Jardim 800m²", "Ginásio + adega", "Condomínio fechado", "5 min golf"],
+        "search_keywords": "moradia moradias V5 V4 V3 V2 villa vilas luxo cascais quinta marinha piscina jardim premium investimento casa casas imóvel imóveis ver mostra tens há",
+    },
+    {
+        "title": "Loft Industrial — LX Factory",
+        "price": "525.000 €",
+        "location": "LX Factory, Alcântara — Lisboa",
+        "typology": "T1+1",
+        "area_m2": 95,
+        "image": "https://images.unsplash.com/photo-1502672260266-1c1ef2d93688?w=900&q=80&auto=format&fit=crop",
+        "link": "https://consenso-shop.eu/demo/loft-lx-factory",
+        "description": "Loft industrial com pé-direito de 4,2m, vigas de ferro originais e janelas industriais panorâmicas. Localização icónica no hub criativo de Lisboa. Ideal para investimento ou habitação de carácter.",
+        "features": ["Pé-direito 4.2m", "Janelas industriais", "Hub criativo", "Vista cidade", "Investimento turístico"],
+        "search_keywords": "loft lofts apartamento apartamentos T1 lisboa LX factory alcantara investimento startup criativo moderno imóvel imóveis ver mostra tens há",
+    },
+    {
+        "title": "Quinta Histórica — Sintra",
+        "price": "3.250.000 €",
+        "location": "Colares, Sintra",
+        "typology": "V8",
+        "area_m2": 680,
+        "image": "https://images.unsplash.com/photo-1568605114967-8130f3a36994?w=900&q=80&auto=format&fit=crop",
+        "link": "https://consenso-shop.eu/demo/quinta-sintra",
+        "description": "Propriedade histórica do século XIX com 3 hectares de terreno, vinha biológica em produção e ruínas restauradas. Casa principal com 8 quartos, casa de hóspedes e estábulo. A 8 km da praia das Maçãs.",
+        "features": ["3 hectares", "Vinha biológica", "Século XIX restaurado", "Casa de hóspedes", "8 km praia"],
+        "search_keywords": "quinta quintas moradia moradias V8 V6 V5 sintra colares investimento histórica vinha terreno hectares praia luxo casa casas imóvel imóveis ver mostra tens há",
+    },
+    {
+        "title": "Apartamento Marina — Vilamoura",
+        "price": "695.000 €",
+        "location": "Marina de Vilamoura, Algarve",
+        "typology": "T2",
+        "area_m2": 125,
+        "image": "https://images.unsplash.com/photo-1512917774080-9991f1c4c750?w=900&q=80&auto=format&fit=crop",
+        "link": "https://consenso-shop.eu/demo/apartamento-vilamoura",
+        "description": "Apartamento frente à marina com terraço privado de 35m² sobre o porto. Vista direta para iates, restaurantes e Casino. Estacionamento privativo e acesso à piscina partilhada do condomínio.",
+        "features": ["Terraço 35m² vista marina", "Piscina condomínio", "Garagem privada", "5 min praia", "Investimento turístico"],
+        "search_keywords": "apartamento apartamentos T2 algarve vilamoura marina praia investimento turístico arrendamento férias imóvel imóveis ver mostra tens há",
+    },
+]
+
 
 KNOWLEDGE_TEXT = """SITE: https://consenso-shop.eu
 TÍTULO: Consenso — Chatbots Multilingue com Inteligência Artificial para Empresas e Imobiliárias
@@ -278,7 +383,7 @@ async def run():
         })
         print(f"  · Data source criada: {source_id[:8]}…")
 
-    # Upsert chunks
+    # Upsert knowledge chunks (textual)
     for ch in KNOWLEDGE_CHUNKS:
         await db.data_chunks.insert_one({
             "id": str(uuid.uuid4()),
@@ -290,11 +395,41 @@ async def run():
             "meta": {"topic": ch["topic"]},
             "indexed_at": now_iso(),
         })
-    print(f"  · {len(KNOWLEDGE_CHUNKS)} chunks indexados")
+    print(f"  · {len(KNOWLEDGE_CHUNKS)} chunks de knowledge indexados")
+
+    # Upsert PREMIUM DEMO PROPERTIES (kind=item → renders as cards)
+    for p in DEMO_PROPERTIES:
+        blob = (
+            f"{p['title']}. Localização: {p['location']}. Tipologia {p['typology']}, "
+            f"{p['area_m2']}m². {p['description']} Características: {', '.join(p['features'])}. "
+            f"Palavras-chave: {p['search_keywords']}"
+        )
+        await db.data_chunks.insert_one({
+            "id": str(uuid.uuid4()),
+            "tenant_id": tid,
+            "source_id": source_id,
+            "kind": "item",
+            "title": p["title"],
+            "text": blob,
+            "meta": {
+                "title": p["title"],
+                "price": p["price"],
+                "image": p["image"],
+                "link": p["link"],
+                "description": p["description"],
+                "location": p["location"],
+                "typology": p["typology"],
+                "area_m2": p["area_m2"],
+                "features": p["features"],
+            },
+            "indexed_at": now_iso(),
+        })
+    print(f"  · {len(DEMO_PROPERTIES)} imóveis demo premium indexados como cards")
 
     await db.data_sources.update_one(
         {"id": source_id},
-        {"$set": {"items": len(KNOWLEDGE_CHUNKS), "chunks": len(KNOWLEDGE_CHUNKS),
+        {"$set": {"items": len(KNOWLEDGE_CHUNKS) + len(DEMO_PROPERTIES),
+                  "chunks": len(KNOWLEDGE_CHUNKS) + len(DEMO_PROPERTIES),
                   "indexed_at": now_iso()}},
     )
 

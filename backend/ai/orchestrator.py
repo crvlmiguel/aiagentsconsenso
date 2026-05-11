@@ -16,13 +16,22 @@ def _retrieved_to_cards(retrieved: List[dict], limit: int = 3) -> List[dict]:
         meta = d.get("meta") or {}
         if not meta.get("title"):
             continue
-        out.append({
+        card = {
             "title": str(meta.get("title", ""))[:160],
             "price": str(meta.get("price", ""))[:60],
             "image": str(meta.get("image", ""))[:600],
             "link": str(meta.get("link", ""))[:600],
             "description": str(meta.get("description", ""))[:400],
-        })
+        }
+        # Premium real-estate enrichments (gracefully optional)
+        if meta.get("location"): card["location"] = str(meta["location"])[:120]
+        if meta.get("typology"): card["typology"] = str(meta["typology"])[:20]
+        if meta.get("area_m2"):
+            try: card["area_m2"] = int(meta["area_m2"])
+            except (TypeError, ValueError): pass
+        if isinstance(meta.get("features"), list):
+            card["features"] = [str(f)[:40] for f in meta["features"][:5]]
+        out.append(card)
         if len(out) >= limit:
             break
     return out

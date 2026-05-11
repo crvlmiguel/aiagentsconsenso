@@ -53,8 +53,8 @@ async def _ensure_admin(db) -> str:
     return tenant_id
 
 
-async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[dict]):
-    """Create-or-update an agent + its knowledge base.
+async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[dict], demo_items: list[dict] | None = None):
+    """Create-or-update an agent + its knowledge base (text) + optional demo items (cards).
 
     Idempotent design:
     - **Always overwrites** content fields (system_prompt, knowledge text, theme,
@@ -96,9 +96,31 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
             "kind": "knowledge", "title": ch["topic"], "text": ch["text"],
             "meta": {"topic": ch["topic"]}, "indexed_at": _now(),
         })
+
+    # ----- Demo items (cards) — optional -----
+    demo_items = demo_items or []
+    for p in demo_items:
+        blob = (
+            f"{p['title']}. Localização: {p['location']}. Tipologia {p['typology']}, "
+            f"{p['area_m2']}m². {p['description']} Características: {', '.join(p['features'])}. "
+            f"Palavras-chave: {p.get('search_keywords', '')}"
+        )
+        await db.data_chunks.insert_one({
+            "id": str(uuid.uuid4()), "tenant_id": tenant_id, "source_id": source_id,
+            "kind": "item", "title": p["title"], "text": blob,
+            "meta": {
+                "title": p["title"], "price": p["price"],
+                "image": p["image"], "link": p["link"],
+                "description": p["description"],
+                "location": p["location"], "typology": p["typology"],
+                "area_m2": p["area_m2"], "features": p["features"],
+            },
+            "indexed_at": _now(),
+        })
+    total = len(kb) + len(demo_items)
     await db.data_sources.update_one(
         {"id": source_id},
-        {"$set": {"items": len(kb), "chunks": len(kb),
+        {"$set": {"items": total, "chunks": total,
                   "url": agent_def.get("kb_url", ""), "indexed_at": _now()}},
     )
 
@@ -283,6 +305,7 @@ async def bootstrap(db):
             AVATAR_URL as MARIA_AVATAR,
             THEME as MARIA_THEME,
             KNOWLEDGE_CHUNKS as MARIA_KB,
+            DEMO_PROPERTIES as MARIA_DEMO,
         )
         from seed_staylocal import (
             SYSTEM_PROMPT as SL_PROMPT,
@@ -309,7 +332,7 @@ async def bootstrap(db):
             "icebreakers": MARIA_ICE, "welcome_message": MARIA_WELCOME,
             "avatar_url": MARIA_AVATAR, "theme": MARIA_THEME,
             "kb_name": "Site Consenso", "kb_url": "https://consenso-shop.eu",
-        }, MARIA_KB)
+        }, MARIA_KB, demo_items=MARIA_DEMO)
 
         await _ensure_agent_with_kb(db, tenant_id, {
             "name": "StayLocal Concierge AI",
