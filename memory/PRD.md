@@ -1,10 +1,26 @@
-# Consenso Plus — PRD (v3.15)
+# Consenso Plus — PRD (v3.16)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token** e **cards imobiliários premium**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.16 (2026-02) — Simulação de crédito conversacional + comparação lado-a-lado
+
+### Refinamentos sobre v3.15
+- 🧮 **Recolha conversacional de dados de crédito**: Maria pede em ordem natural (1 pergunta por turno) montante → entrada → prazo → idade. Detecção de continuação de fluxo (mesmo sem palavras-chave de crédito na resposta).
+- 🏦 **Limite bancário pela idade aplicado automaticamente**: regra `80 - idade` calcula prazo máximo permitido pelo banco (ex: 60 anos → max 20 anos). Card mostra "(máx N)" quando há restrição.
+- 📊 **Comparação 2 cenários lado-a-lado** no mesmo card: cenário primário (o pedido) + alternativa (prazo ±5 anos). Mostra **delta colorido** (verde se poupa juros, vermelho se paga mais) para ajudar a decisão.
+- 🌐 **Regex robusta** para extração de params (`entrada de 30%`, `prazo de 25 anos`, `tenho 45 anos`, `idade 35`, `50 anos de idade`) — distingue corretamente prazo de idade na mesma frase.
+- 📋 **Maria apresenta TODOS os planos** numa só mensagem quando perguntado sobre preços (sem fragmentar nem esperar follow-up).
+- 🎨 Widget renderiza card de comparação com bloco dedicado `.finance-compare` com grid + diffs coloridos.
+
+### Validação
+- ✅ **114/114 pytest passed**: 28 testes Phase 1 (Finance + Lead Score + Property Feed + Comparação cenários) + 86 anteriores. Zero regressões.
+- ✅ Deploy Agent: PASS — zero issues bloqueadores
+- ✅ Curl E2E: fluxo crédito multi-turno funciona (Turn 1 mostra preliminar, Turn 2+ refina com dados novos)
+- ✅ Multi-idioma: 5/5 idiomas (EN/FR/DE/ES/NL) testados
 
 ## v3.15 (2026-02) — Phase 1 features (planos Consenso Shop alinhados + features pendentes)
 
