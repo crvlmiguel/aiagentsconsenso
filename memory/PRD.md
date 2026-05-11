@@ -1,10 +1,76 @@
-# Consenso Plus — PRD (v3.14)
+# Consenso Plus — PRD (v3.15)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token** e **cards imobiliários premium**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.15 (2026-02) — Phase 1 features (planos Consenso Shop alinhados + features pendentes)
+
+### 1. Maria · Knowledge dos planos Consenso (P0 · concluído)
+SYSTEM_PROMPT e KB atualizados em `seed_maria.py` com:
+- **STARTER €49,90/mês**: até 2 utilizadores, 2.000 msg/mês, Webchat+WhatsApp, sem CRM/multicanal
+- **PRO €74,90/mês** (Mais Popular): 5 utilizadores, ilimitadas, 5 canais, CRM + Lead Scoring + Live Chat Takeover + Integração imóveis terceiros
+- **ENTERPRISE sob consulta**: ilimitado + Simulações Financeiras + Follow-up Auto WhatsApp + Otimização Multilingue Website + SLA + Gestor de Conta
+Maria recomenda o plano certo conforme o perfil do cliente (testar/escalar/grupo).
+
+### 2. Multi-idioma automático (P0 · concluído)
+Reforço no system prompt de `orchestrator.py` (generate_response + generate_response_stream): instruções explícitas para detetar idioma da última mensagem do utilizador e responder EXCLUSIVAMENTE nesse idioma.
+- Validado: **5/5 idiomas** (EN, FR, DE, ES, NL) respondem corretamente. PT-PT continua default.
+
+### 3. Simulações financeiras (P0 · concluído)
+Novo módulo `/app/backend/ai/finance.py`:
+- `calcular_prestacao(valor, entrada_pct, prazo, euribor, spread)` → fórmula PMT
+- `detect_finance_intent(text)` → regex PT/EN para "prestação/credito/mortgage"
+- `extract_price_from_text(text)` → suporta `500k`, `1.5M`, `350 000€`, `780000€`, `1.450.000 €`
+- Hook em `_process_inbound`: detetada intenção + preço → backend calcula prestação e injeta como `kind=knowledge` chunk + gera `card finance_simulation` no widget. Maria comenta o resultado em 1 frase.
+- Widget renderiza card especial com prestação destacada (azul brand) + entrada/montante/prazo/taxa em grid.
+
+### 4. Lead Scoring 0-100 automático (P0 · concluído)
+Novo módulo `/app/backend/ai/lead_score.py`:
+- Algoritmo determinístico (sem LLM) baseado em sinais explícitos:
+  - Dados pessoais (até 30 pts): nome, email, telefone
+  - Especificidade procura (até 30 pts): tipologia, zona, orçamento
+  - Comportamentais (até 30 pts): engajamento, urgência, visita marcada, sim crédito
+  - Perfil (até 10 pts): investidor, habitação própria, precisa de crédito
+- Tier: **frio** (0-39), **morno** (40-69), **quente** (70-100)
+- `_recompute_lead_score()` corre após cada `create_lead` em background
+- Visit booking via `/book-visit` cria lead com score=85 tier=quente
+- Frontend `Leads.jsx` mostra score com cor (vermelho/laranja/cinza), ícone (🔥🌡️❄️) e sinais no tooltip
+
+### 5. Notificação email ao agente (P0 · concluído)
+Hook reforçado em `_notify_new_lead`: subject inclui tier_icon + score (`🔥 Novo lead · Pedro (85)`). Endpoint `/book-visit` também dispara notificação. SMTP per-agent em `agent.email_config` (já existia, agora utilizado).
+
+### 6. Follow-up automático WhatsApp (P0 · concluído)
+Novo módulo `/app/backend/follow_up.py` + scheduler em background:
+- Cadência: **24h → 72h → 168h** (3 toques) após criação de lead
+- Critérios: tem telefone, score >= 40 (morno/quente), agente com WhatsApp ativo, `follow_up_enabled !== false`
+- Templates PT/EN inteligentes adaptados a cada step
+- Marca `followup_steps: ["fu1", "fu2", "fu3"]` no lead para não duplicar
+- Tick a cada 10 min em produção, mas desativável via `DISABLE_SCHEDULERS=1`
+- Endpoint manual: `POST /api/agents/follow-up/tick` (admin only)
+
+### 7. Feeds de imóveis externos · Idealista/Imovirtual (P0 · concluído)
+Novo módulo `/app/backend/property_feed.py`:
+- Parsers: **CSV** (colunas PT ou EN), **XML** (Idealista/Imovirtual style), **Google Sheets** (publicado em CSV)
+- Indexa como `kind=external_item` chunks em MongoDB
+- Refresh semanal automático em background (scheduler 7 dias)
+- Retrieval atualizada (`/app/backend/ai/retrieval.py`): prioriza `kind=item` (carteira própria) > `knowledge` > `external_item`. Só apresenta externos quando o portefólio próprio tem < 2 hits.
+- Widget marca cards externos com badge "Parceiro" (amarelo brand)
+- Endpoints CRUD: `GET/PUT /api/agents/{id}/feeds`, `POST /api/agents/{id}/feeds/refresh`
+
+### Frontend
+- Novo separador **"Automação"** no editor de agentes (`/app/agentes`)
+- Componente `AgentAutomation.jsx` com: toggle Follow-up + tabela de feeds (add/edit/remove/refresh)
+- Stats por feed: nº de imóveis indexados + último refresh
+- `Leads.jsx` com novo display de score (cor/ícone/sinais)
+
+### Validação
+- ✅ **85/85 pytest passed** (15 novos em `test_phase1_features.py` + 70 anteriores). Zero regressões.
+- ✅ Testing agent v3_fork (iteration_13): 100% backend (34/34 phase1 tests + 104 regression), 100% frontend (Automation tab + panel + feed CRUD + persistence + refresh + Leads tier display)
+- ✅ Manual curl: Maria responde em PT/EN/FR/DE/ES/NL corretamente, sabe os 3 planos, faz simulação financeira, book-visit cria lead quente
+- ✅ Schedulers arrancam no startup (logs confirmados)
 
 ## v3.14 (2026-02) — Maria modo Imobiliária Premium (efeito WOW)
 
