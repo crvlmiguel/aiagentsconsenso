@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request, Body
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -1106,6 +1106,111 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
         "cards": resp.get("cards", []),
         "intent": intent, "structure": structure,
         "actions": [], "language": lang,
+    }
+
+
+@api.post("/webchat/{tenant_id}/book-visit")
+async def webchat_book_visit(tenant_id: str, payload: dict = Body(...)):
+    """Public endpoint — visitor books a property viewing from a card.
+    Creates a lead with tag 'visita-marcada' + the property/visit details in meta.
+    Returns: {ok, lead_id, message_pt}."""
+    tenant = await db.tenants.find_one({"id": tenant_id}, {"_id": 0})
+    if not tenant:
+        raise HTTPException(404, "Tenant não encontrado")
+
+    name  = (payload.get("name")  or "").strip()[:120]
+    email = (payload.get("email") or "").strip()[:240]
+    phone = (payload.get("phone") or "").strip()[:60]
+    date  = (payload.get("date")  or "").strip()[:60]
+    time_ = (payload.get("time")  or "").strip()[:30]
+    property_title = (payload.get("property_title") or "").strip()[:200]
+    property_link  = (payload.get("property_link")  or "").strip()[:600]
+    external_user_id = (payload.get("external_user_id") or "").strip()[:120]
+    agent_id = payload.get("agent_id")
+    notes = (payload.get("notes") or "").strip()[:500]
+
+    if not name or not email:
+        raise HTTPException(400, "Nome e email são obrigatórios")
+    if not date:
+        raise HTTPException(400, "Data da visita é obrigatória")
+
+    # Find associated conversation (if any)
+    convo = None
+    if external_user_id:
+        convo = await db.conversations.find_one(
+            {"tenant_id": tenant_id, "external_user_id": external_user_id,
+             "status": {"$ne": "closed"}}, {"_id": 0, "id": 1},
+        )
+
+    lead_id = new_id()
+    lead_doc = {
+        "id": lead_id,
+        "tenant_id": tenant_id,
+        "name": name,
+        "email": email,
+        "phone": phone or None,
+        "company": None,
+        "source": "webchat-visit",
+        "stage": "qualified",
+        "score": 85,  # Strong intent — booked a viewing
+        "tags": ["visita-marcada"] + (["imobiliária"] if property_title else []),
+        "notes": (
+            f"📅 Visita marcada para {date}{' às ' + time_ if time_ else ''}\n"
+            f"🏠 Imóvel: {property_title or 'sem referência'}\n"
+            f"{('🔗 ' + property_link) if property_link else ''}\n"
+            f"{notes}"
+        ).strip(),
+        "agent_id": agent_id,
+        "conversation_id": (convo or {}).get("id"),
+        "meta": {
+            "visit_date": date,
+            "visit_time": time_,
+            "property_title": property_title,
+            "property_link": property_link,
+        },
+        "created_at": now_iso(),
+    }
+    await db.leads.insert_one(lead_doc.copy())
+
+    # Inject a message into the conversation (visible in Inbox)
+    if convo:
+        sys_msg = {
+            "id": new_id(), "tenant_id": tenant_id, "conversation_id": convo["id"],
+            "sender": "ai", "sender_name": "Sistema",
+            "text": (
+                f"✅ Visita marcada para {date}"
+                f"{' às ' + time_ if time_ else ''} — {property_title or 'imóvel selecionado'}. "
+                f"Cliente: {name} ({email})."
+            ),
+            "cards": [],
+            "meta": {"event": "visit_booked", "lead_id": lead_id},
+            "created_at": now_iso(),
+        }
+        await db.messages.insert_one(sys_msg.copy())
+        await db.conversations.update_one(
+            {"id": convo["id"]},
+            {"$set": {"last_message": sys_msg["text"][:140], "last_message_at": now_iso()},
+             "$addToSet": {"tags": "visita-marcada"}},
+        )
+        await ws_manager.broadcast(tenant_id,
+            {"type": "message", "conversation_id": convo["id"], "message": sys_msg})
+
+    # Notify owner via email (best-effort, non-blocking)
+    if agent_id:
+        agent = await db.agents.find_one({"id": agent_id}, {"_id": 0})
+        if agent:
+            try:
+                await _notify_new_lead(tenant_id, lead_id, agent)
+            except Exception as e:
+                logger.warning(f"notify visit lead failed: {e}")
+
+    return {
+        "ok": True,
+        "lead_id": lead_id,
+        "message_pt": (
+            f"✨ Visita agendada para {date}{' às ' + time_ if time_ else ''}. "
+            f"Entraremos em contacto em {email} para confirmar."
+        ),
     }
 
 

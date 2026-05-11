@@ -240,13 +240,34 @@ JSON: {{"reply": "Boa! Tenho esta opção em Lagos que encaixa.", "follow_up": "
                 "description": str(c.get("description", ""))[:400],
             })
 
-    # Safety net: reply mentions properties but no cards attached → auto-attach top items
+    # Safety net: ONLY auto-attach cards when the USER's last message has
+    # explicit "show me / I want to see" intent. Maria should NEVER push
+    # property cards in conversations about docs, credit, process, services, etc.
     if not safe_cards and server_cards:
-        looks_like_listing = any(s in (reply_text or "").lower() for s in
-                                 ["moradia", "apartamento", "imóvel", "imovel",
-                                  "t1", "t2", "t3", "t4", "v1", "v2", "v3", "v4",
-                                  "opção", "opções", "encaixa", "tenho"])
-        if looks_like_listing:
+        last_user = ""
+        for m in reversed(history or []):
+            if m.get("sender") == "user":
+                last_user = (m.get("text") or "").lower()
+                break
+        explicit_show_intent = any(s in last_user for s in [
+            "mostra", "mostrar", "mostre", "ver imóv", "ver imov", "ver casa",
+            "ver apart", "ver mora", "vê imóv", "ve imov",
+            "que imóv", "que imov", "que casas", "que apart", "tens imóv", "tens imov",
+            "tens casa", "tens apart", "tens mora",
+            "quero ver", "quero comprar", "quero arrendar", "procuro", "à procura",
+            "opções", "sugestões", "opcoes", "sugestoes",
+            "investimento imobil", "investir em im",
+        ])
+        # Also accept when user wrote a property typology + zone (T2 Lisboa, V4 Cascais...)
+        if not explicit_show_intent:
+            import re as _re
+            has_typology = bool(_re.search(r"\b[tv][1-5]\b", last_user))
+            has_zone = any(z in last_user for z in
+                           ["lisboa", "cascais", "sintra", "porto", "algarve",
+                            "vilamoura", "estoril", "comporta", "chiado", "principe",
+                            "alfama", "alcântara", "alcantara", "lagos", "albufeira"])
+            explicit_show_intent = has_typology and has_zone
+        if explicit_show_intent:
             safe_cards = server_cards[:3]
 
     return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
@@ -400,11 +421,36 @@ INSTRUÇÕES (CRÍTICO):
                 continue
 
     if not safe_cards and server_cards:
-        looks_like_listing = any(s in (reply_text or "").lower() for s in
-                                 ["moradia", "apartamento", "imóvel", "imovel",
-                                  "t1", "t2", "t3", "t4", "v1", "v2", "v3", "v4",
-                                  "opção", "opções", "encaixa", "tenho"])
-        if looks_like_listing:
+        last_user = ""
+        for m in reversed(history or []):
+            if m.get("sender") == "user":
+                last_user = (m.get("text") or "").lower()
+                break
+        explicit_show_intent = any(s in last_user for s in [
+            "mostra", "mostrar", "mostre", "ver imóv", "ver imov", "ver casa",
+            "ver apart", "ver mora", "ver penthouse", "ver loft", "ver quinta",
+            "ver propriedade", "vê imóv", "ve imov",
+            "que imóv", "que imov", "que casas", "que apart", "que mora",
+            "que propriedade", "que penthouse",
+            "tens imóv", "tens imov", "tens casa", "tens apart", "tens mora",
+            "tens penthouse", "tens propriedade",
+            "quero comprar", "quero arrendar", "procuro casa", "procuro apart",
+            "procuro mora", "procuro imóv", "procuro imov", "procuro propriedade",
+            "à procura de casa", "à procura de apart", "à procura de imóv",
+            "à procura de mora", "a procura de imov", "a procura de casa",
+            "opções de invest", "sugestões de invest", "opcoes de invest", "sugestoes de invest",
+            "investimento imobil", "investir em imóv", "investir em imov",
+            "imóvel para invest", "imovel para invest",
+            "casa para compr", "apart para compr",
+        ])
+        if not explicit_show_intent:
+            has_typology = bool(re.search(r"\b[tv][1-5]\b", last_user))
+            has_zone = any(z in last_user for z in
+                           ["lisboa", "cascais", "sintra", "porto", "algarve",
+                            "vilamoura", "estoril", "comporta", "chiado", "principe",
+                            "alfama", "alcântara", "alcantara", "lagos", "albufeira"])
+            explicit_show_intent = has_typology and has_zone
+        if explicit_show_intent:
             safe_cards = server_cards[:3]
 
     # If we never streamed a reply char (e.g. LLM emitted use_items first), emit it now

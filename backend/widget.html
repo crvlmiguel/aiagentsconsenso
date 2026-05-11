@@ -87,8 +87,35 @@
 .card .d{font-size:12.5px;color:#5B6B82;margin-top:6px;line-height:1.5;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
 .card .features{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
 .card .features span{background:#F4F7FB;color:#5B6B82;padding:3px 8px;border-radius:6px;font-size:10.5px;font-weight:500;border:1px solid #EEF1F7}
-.card a{display:flex;align-items:center;justify-content:center;gap:6px;padding:12px;text-align:center;background:var(--user);color:#fff;text-decoration:none;font-size:13px;font-weight:600;transition:filter .15s}
-.card a:hover{filter:brightness(.92)}
+.card a.detail{display:flex;align-items:center;justify-content:center;gap:6px;padding:11px;text-align:center;background:#fff;color:var(--user);text-decoration:none;font-size:13px;font-weight:600;transition:background .15s;border-top:1px solid #EEF1F7}
+.card a.detail:hover{background:#F4F7FB}
+.card .actions{display:flex;border-top:1px solid #EEF1F7}
+.card .actions a, .card .actions button{flex:1;display:flex;align-items:center;justify-content:center;gap:5px;padding:11px 8px;text-align:center;font-size:12.5px;font-weight:600;text-decoration:none;border:0;cursor:pointer;background:#fff;color:var(--user);transition:background .15s;font-family:inherit}
+.card .actions a:hover{background:#F4F7FB}
+.card .actions button.book{background:var(--user);color:#fff}
+.card .actions button.book:hover{filter:brightness(.92)}
+.card .actions a + button{border-left:1px solid #EEF1F7}
+
+/* Visit booking modal */
+.cp-modal-bg{position:absolute;inset:0;background:rgba(11,19,36,.55);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;z-index:100;animation:fadeIn .2s}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+.cp-modal{background:#fff;border-radius:20px;padding:22px 22px 20px;width:88%;max-width:340px;box-shadow:0 20px 50px rgba(0,0,0,.3);animation:slideUp .25s cubic-bezier(.2,.8,.2,1)}
+@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+.cp-modal h3{margin:0 0 4px;font-size:17px;color:#0B1324;font-weight:700;letter-spacing:-.01em}
+.cp-modal .sub{color:#5B6B82;font-size:12.5px;margin-bottom:14px;line-height:1.4}
+.cp-modal .prop{background:#F4F7FB;border-radius:10px;padding:9px 11px;font-size:12px;color:#0B1324;margin-bottom:14px;font-weight:600}
+.cp-modal label{display:block;font-size:11.5px;color:#5B6B82;margin:8px 0 4px;font-weight:600}
+.cp-modal input{width:100%;padding:9px 11px;border:1px solid #E5EAF2;border-radius:10px;font-size:13px;font-family:inherit;outline:none;transition:border-color .15s;box-sizing:border-box;background:#fff;color:#0B1324}
+.cp-modal input:focus{border-color:var(--user)}
+.cp-modal .row{display:flex;gap:8px}
+.cp-modal .row > div{flex:1}
+.cp-modal .btn-row{display:flex;gap:8px;margin-top:16px}
+.cp-modal button.confirm{flex:1;background:var(--user);color:#fff;border:0;padding:11px;border-radius:10px;font-weight:700;font-size:13.5px;cursor:pointer;font-family:inherit;transition:filter .15s}
+.cp-modal button.confirm:hover{filter:brightness(.92)}
+.cp-modal button.confirm:disabled{opacity:.6;cursor:not-allowed}
+.cp-modal button.cancel{background:#F4F7FB;color:#0B1324;border:0;padding:11px 14px;border-radius:10px;font-weight:600;font-size:13.5px;cursor:pointer;font-family:inherit;transition:background .15s}
+.cp-modal button.cancel:hover{background:#EEF1F7}
+.cp-modal .err{color:#DC2626;font-size:11.5px;margin-top:8px;min-height:14px}
 .inp{display:flex;gap:8px;padding:12px;border-top:1px solid #E5EAF2;background:#fff}
 .inp input{flex:1;padding:11px 16px;border:1px solid #E5EAF2;border-radius:999px;font:inherit;outline:none;font-size:14px;transition:all .15s}
 .inp input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
@@ -127,7 +154,7 @@ const params = new URLSearchParams(location.search);
 const API = params.get("api") || (location.origin + "/api");
 const TENANT = params.get("tenant");
 const AGENT_ID = params.get("agent") || "";
-const NAME_V = params.get("name") || "Visitante";
+let NAME_V = params.get("name") || "Visitante";
 const UID = "w-" + Math.random().toString(36).slice(2,10);
 const msgs = document.getElementById("msgs");
 const f = document.getElementById("f");
@@ -191,10 +218,27 @@ function botMsg(text, icebreakers, cards, opts) {
         body += '</div>';
       }
       body += '</div>';
-      const linkHtml = c.link
-        ? '<a href="' + c.link + '" target="_blank" rel="noreferrer">Ver detalhes <span style="font-size:14px">→</span></a>'
-        : '';
-      card.innerHTML = imgHtml + body + linkHtml;
+      const isProperty = !!(c.typology || (c.location && (c.area_m2 || c.features)));
+      let actionsHtml = '';
+      if (c.link || isProperty) {
+        actionsHtml = '<div class="actions">';
+        if (c.link) {
+          actionsHtml += '<a href="' + c.link + '" target="_blank" rel="noreferrer">Ver detalhes →</a>';
+        }
+        if (isProperty) {
+          // Marcar visita button — opens in-widget modal
+          const propTitle = (c.title || "").replace(/"/g, '&quot;');
+          const propLink = (c.link || "").replace(/"/g, '&quot;');
+          actionsHtml += '<button class="book" data-prop-title="' + propTitle + '" data-prop-link="' + propLink + '">📅 Marcar visita</button>';
+        }
+        actionsHtml += '</div>';
+      }
+      card.innerHTML = imgHtml + body + actionsHtml;
+      // Wire up book buttons
+      const bookBtn = card.querySelector("button.book");
+      if (bookBtn) {
+        bookBtn.addEventListener("click", () => openBookModal(bookBtn.dataset.propTitle, bookBtn.dataset.propLink));
+      }
       carousel.appendChild(card);
     });
     msgs.appendChild(carousel);
@@ -245,6 +289,81 @@ async function postWithRetry(url, payload, attempts) {
     }
   }
   throw lastErr;
+}
+
+// ===== Visit booking modal =====
+function openBookModal(propertyTitle, propertyLink) {
+  // Prevent duplicate modals
+  if (document.querySelector(".cp-modal-bg")) return;
+  const bg = document.createElement("div");
+  bg.className = "cp-modal-bg";
+  const minDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+  bg.innerHTML = '<div class="cp-modal" role="dialog" aria-labelledby="cp-modal-title">'
+    + '<h3 id="cp-modal-title">📅 Marcar visita</h3>'
+    + '<div class="sub">Reserve um horário para visitar este imóvel. A equipa entrará em contacto para confirmar.</div>'
+    + (propertyTitle ? '<div class="prop">🏠 ' + propertyTitle + '</div>' : '')
+    + '<label>Nome completo</label>'
+    + '<input type="text" id="bk-name" autocomplete="name" placeholder="O seu nome">'
+    + '<label>Email</label>'
+    + '<input type="email" id="bk-email" autocomplete="email" placeholder="email@exemplo.pt">'
+    + '<label>Telefone (opcional)</label>'
+    + '<input type="tel" id="bk-phone" autocomplete="tel" placeholder="+351 ...">'
+    + '<div class="row">'
+    +   '<div><label>Data</label><input type="date" id="bk-date" min="' + minDate + '"></div>'
+    +   '<div><label>Hora</label><input type="time" id="bk-time" value="11:00"></div>'
+    + '</div>'
+    + '<div class="err" id="bk-err"></div>'
+    + '<div class="btn-row">'
+    +   '<button class="cancel" type="button" id="bk-cancel">Cancelar</button>'
+    +   '<button class="confirm" type="button" id="bk-confirm">Confirmar visita</button>'
+    + '</div>'
+    + '</div>';
+  document.body.appendChild(bg);
+  const nameI = bg.querySelector("#bk-name");
+  const emailI = bg.querySelector("#bk-email");
+  const phoneI = bg.querySelector("#bk-phone");
+  const dateI = bg.querySelector("#bk-date");
+  const timeI = bg.querySelector("#bk-time");
+  const errEl = bg.querySelector("#bk-err");
+  const cancel = bg.querySelector("#bk-cancel");
+  const confirm = bg.querySelector("#bk-confirm");
+  // Prefill name if widget already knows it
+  if (NAME_V) nameI.value = NAME_V;
+  dateI.value = minDate;
+  nameI.focus();
+  const close = () => bg.remove();
+  cancel.addEventListener("click", close);
+  bg.addEventListener("click", (e) => { if (e.target === bg) close(); });
+  document.addEventListener("keydown", function onEsc(e) {
+    if (e.key === "Escape") { close(); document.removeEventListener("keydown", onEsc); }
+  });
+  const validateEmail = (s) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+  confirm.addEventListener("click", async () => {
+    errEl.textContent = "";
+    const name = (nameI.value || "").trim();
+    const email = (emailI.value || "").trim();
+    const phone = (phoneI.value || "").trim();
+    const date = (dateI.value || "").trim();
+    const time = (timeI.value || "").trim();
+    if (!name || name.length < 2) return errEl.textContent = "Por favor indique o seu nome.";
+    if (!validateEmail(email)) return errEl.textContent = "Email inválido.";
+    if (!date) return errEl.textContent = "Por favor escolha uma data.";
+    confirm.disabled = true; confirm.textContent = "A confirmar…";
+    try {
+      const j = await postWithRetry(API + "/webchat/" + TENANT + "/book-visit", {
+        name: name, email: email, phone: phone, date: date, time: time,
+        property_title: propertyTitle || "", property_link: propertyLink || "",
+        external_user_id: UID, agent_id: AGENT_ID || null,
+      });
+      close();
+      // Show celebratory message in chat
+      botMsg(j.message_pt || ("✨ Visita marcada para " + date + (time ? " às " + time : "") + "."), [], [], { continuation: true });
+      NAME_V = name; // remember
+    } catch (err) {
+      errEl.textContent = "Não foi possível marcar a visita. Tente novamente.";
+      confirm.disabled = false; confirm.textContent = "Confirmar visita";
+    }
+  });
 }
 
 async function send(text) {
