@@ -1,10 +1,49 @@
-# Consenso Plus — PRD (v3.10)
+# Consenso Plus — PRD (v3.11)
 
 ## Visão geral
-Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
+Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming de tokens em tempo real**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.11 (2026-02) — Streaming SSE de tokens em tempo real
+
+### Streaming token-by-token (P1 · concluído)
+A perceived latency do chat colapsou de ~4s para **~600ms** ao primeiro token via Server-Sent Events.
+
+**Backend**:
+- Novo endpoint `POST /api/webchat/{tenant_id}/stream` — SSE com `text/event-stream`
+- 3 tipos de eventos: `ready` (imediato, com `conversation_id`) → `chunk` (text deltas) → `done` (reply completo, follow_up, cards). Erros chegam como `error` (não 500).
+- Header `X-Accel-Buffering: no` desativa buffering do nginx — chunks chegam ao cliente sem espera
+- **`ai/router.py::llm_stream()`** usa `openai.AsyncOpenAI(stream=True)` direto (fora do `LlmChat`)
+- **`ai/orchestrator.py::generate_response_stream()`** + helper `_extract_partial_reply()` que **extrai o campo `"reply"` JSON incrementalmente** (state machine que tolera escapes `\\n \\t \\"` e Unicode `\\uXXXX`) — permite streaming SEM mudar o contrato JSON existente
+- Mesma paralelização anterior (`analyze + retrieve + history` em `asyncio.gather`) + fast-path regex + `execute_actions` em background
+
+**Frontend (`widget.html`)**:
+- `send()` reescrito: usa `fetch + ReadableStream` para consumir SSE
+- Quando o **primeiro chunk** chega → typing-dots desaparece e bubble do bot é criada vazia
+- Cada chunk faz `bubble.textContent += delta` — utilizador vê o texto a ser escrito letra-a-letra
+- Após `done`: typing-dots curtos (600ms) e renderiza follow-up + cards
+- **Fallback automático para `/message`** se SSE falhar (5xx, CORS, drop) — zero downtime UX
+
+**Métricas reais** (Maria SDR via Cloudflare/k8s pública):
+| Métrica | Antes (v3.10) | Agora (v3.11) | Ganho |
+|---|---|---|---|
+| Time To First Token | ~4.0s | **0.61s** | **-85%** |
+| Total response time | ~4.0s | ~2.0s | -50% |
+| Subjective UX | "esperar" | "conversa fluida" | ✨ |
+
+**Validação automatizada (testing_agent_v3_fork — iteration_11)**:
+- ✅ Backend pytest: **6/6 novos** (404 tenant, error SSE bad agent, happy-path event ordering, TTFT 611ms, DB persistence pós-stream, regressão `/message`)
+- ✅ Backend full suite: **53/53** sem regressões
+- ✅ Frontend: streaming + fallback paths verificados cross-domain
+- ✅ Widget render token-by-token em domínio externo (`example.com`)
+- **success_rate: backend=100%, frontend=100%**
+
+### Backlog identificado (não bloqueante)
+- ⚠️ `GET /api/widget/{tenant_id}` (raw view) não injeta `?tenant=` na query — utilizadores que abram este endpoint diretamente veem widget vazio. Funcionamento normal via `widget.js` + `data-*` ou `widget-test/{tid}/{aid}` não é afetado.
+
+## v3.10 (2026-02) — Maria SDR AI + latência reduzida
 
 ## v3.10 (2026-02) — Maria SDR AI + latência reduzida
 
