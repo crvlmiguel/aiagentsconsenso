@@ -176,7 +176,12 @@ def _agent_is_configured(agent: dict) -> tuple[bool, str]:
         if not os.environ.get("EMERGENT_LLM_KEY"):
             return False, "API da IA não configurada ou inválida. Configure a Chave Universal Emergent ou uma chave própria no agente."
         return True, ""
-    if not (agent.get("api_key") or "").strip():
+    # BYO providers — accept either the per-agent api_key OR the corresponding env var
+    # (e.g. OPENAI_API_KEY) so platform-managed keys can power agents without manual paste.
+    has_key = bool((agent.get("api_key") or "").strip())
+    env_keys = {"openai": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "gemini": "GEMINI_API_KEY"}
+    has_env = bool(os.environ.get(env_keys.get(prov, ""), ""))
+    if not has_key and not has_env:
         return False, "API da IA não configurada ou inválida. Por favor configure a API da IA para ativar o agente."
     if prov not in {"openai", "anthropic", "gemini"}:
         return False, "API da IA não configurada ou inválida. Provider não suportado."
@@ -267,8 +272,12 @@ async def test_agent(agent_id: str, inp: SendMessageInput, claims=Depends(curren
     session = f"test-{agent_id}"
     ap, ak = agent.get("api_provider", "emergent"), agent.get("api_key", "")
     try:
-        intent, structure = await analyze_message(inp.text, "webchat", session, ap, ak)
-        retrieved = await retrieve(db, claims["tenant_id"], inp.text, k=6, source_ids=agent.get("data_source_ids") or None)
+        # Parallelize analyze + retrieve — both depend only on inp.text. Saves ~1-2s.
+        import asyncio
+        (intent, structure), retrieved = await asyncio.gather(
+            analyze_message(inp.text, "webchat", session, ap, ak),
+            retrieve(db, claims["tenant_id"], inp.text, k=6, source_ids=agent.get("data_source_ids") or None),
+        )
         decision = decide_actions(intent, structure, agent)
         lang = _detect(inp.text, agent.get("default_language", "pt"))
         reply = await generate_response(agent, [{"sender": "user", "text": inp.text}], intent, structure, retrieved, lang, session)
@@ -834,9 +843,15 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
     session = f"conv-{conv_id}"
     ap, ak = agent.get("api_provider", "emergent"), agent.get("api_key", "")
     try:
-        # Single LLM call combines intent classification + structure extraction
-        # (was previously 2 calls in parallel, now just 1 — saves ~2-3 seconds)
-        intent, structure = await analyze_message(inbound.text, inbound.channel, session, ap, ak)
+        # Parallelize analyze + retrieve + history-fetch — all 3 are independent and only
+        # depend on inbound.text/conv_id. Saves 1-2s vs sequential.
+        import asyncio
+        analyze_task = analyze_message(inbound.text, inbound.channel, session, ap, ak)
+        retrieve_task = retrieve(db, tenant_id, inbound.text, k=6, source_ids=agent.get("data_source_ids") or None)
+        history_task = db.messages.find({"conversation_id": conv_id}, {"_id": 0}).sort("created_at", 1).to_list(20)
+        (intent, structure), retrieved, history = await asyncio.gather(
+            analyze_task, retrieve_task, history_task,
+        )
     except (LLMConfigMissing, LLMProviderError) as e:
         ai_msg = {
             "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
@@ -847,23 +862,23 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
         await db.conversations.update_one({"id": conv_id}, {"$set": {"last_message": str(e), "last_message_at": now_iso()}})
         await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
         return {"conversation_id": conv_id, "reply": str(e), "cards": [], "error": "llm_failure"}
-    retrieved = await retrieve(db, tenant_id, inbound.text, k=6, source_ids=agent.get("data_source_ids") or None)
     decision = decide_actions(intent, structure, agent)
     lang = _detect(inbound.text, agent.get("default_language", default_lang))
 
-    history = await db.messages.find({"conversation_id": conv_id}, {"_id": 0}).sort("created_at", 1).to_list(20)
     try:
         resp = await generate_response(agent, history, intent, structure, retrieved, lang, session)
     except (LLMConfigMissing, LLMProviderError) as e:
         resp = {"reply": str(e), "cards": [], "language": lang}
 
-    action_results = await execute_actions(db, tenant_id, conv_id, decision.get("actions", []))
+    # Fire create_lead/create_ticket in the background — the user doesn't need
+    # to wait for DB inserts and SMTP delivery before seeing the AI's reply.
+    actions_to_run = decision.get("actions", [])
 
     ai_msg = {
         "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
         "sender": "ai", "sender_name": agent.get("name", "AI"),
         "text": resp["reply"], "cards": [],
-        "meta": {"intent": intent, "actions": action_results, "language": lang},
+        "meta": {"intent": intent, "language": lang},
         "created_at": now_iso(),
     }
     await db.messages.insert_one(ai_msg.copy())
@@ -886,17 +901,19 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
         if follow_up_text:
             last_text_for_preview = follow_up_text
 
-    # ===== CRM Qualification — fires and forgets (runs in background) =====
-    # The user gets the reply IMMEDIATELY. Qualification updates the convo
-    # asynchronously and emits a WebSocket update so the CRM panel refreshes.
+    # ===== Background: execute_actions (lead/ticket creation) + CRM qualification =====
+    # Both run AFTER the user sees the reply. Saves ~200-500ms (lead creation + email).
     full_history_snapshot = history + [{"sender": "ai", "text": resp["reply"]}]
     if follow_up_text:
         full_history_snapshot.append({"sender": "ai", "text": follow_up_text})
 
-    async def _bg_qualify(conv_id_inner: str, history_inner: list, tenant_inner: str,
+    async def _bg_actions_and_qualify(conv_id_inner: str, history_inner: list, tenant_inner: str,
                           session_inner: str, ap_inner: str, ak_inner: str,
-                          action_results_inner: list, agent_inner: dict, convo_inner: dict):
+                          actions_inner: list, agent_inner: dict, convo_inner: dict):
         try:
+            # 1. Run create_lead / create_ticket actions
+            action_results_inner = await execute_actions(db, tenant_inner, conv_id_inner, actions_inner)
+            # 2. CRM qualification
             q = await qualify_conversation(history_inner, session_inner, ap_inner, ak_inner)
             q["updated_at"] = now_iso()
             new_tags = q.get("tags", []) or (convo_inner.get("tags") or [])
@@ -911,17 +928,16 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
                         {"$set": {"tags": new_tags, "qualification_status": q["status"]}},
                     )
                     await _notify_new_lead(tenant_inner, a["id"], agent_inner)
-            # Notify UI that qualification is ready
             await ws_manager.broadcast(
                 tenant_inner,
                 {"type": "conversation_update", "conversation_id": conv_id_inner},
             )
         except Exception as e:
-            logger.warning(f"bg qualify failed for conv {conv_id_inner}: {e}")
+            logger.warning(f"bg actions/qualify failed for conv {conv_id_inner}: {e}")
 
-    asyncio.create_task(_bg_qualify(
+    asyncio.create_task(_bg_actions_and_qualify(
         conv_id, full_history_snapshot, tenant_id, session, ap, ak,
-        action_results, agent, convo,
+        actions_to_run, agent, convo,
     ))
 
     # Update conversation immediately (without qualification — that comes via WS later)
@@ -942,7 +958,7 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
         "follow_up": resp.get("follow_up"),
         "cards": resp.get("cards", []),
         "intent": intent, "structure": structure,
-        "actions": action_results, "language": lang,
+        "actions": [], "language": lang,
     }
 
 

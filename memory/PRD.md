@@ -1,10 +1,62 @@
-# Consenso Plus — PRD (v3.9)
+# Consenso Plus — PRD (v3.10)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.10 (2026-02) — Maria SDR AI + latência reduzida
+
+### Maria SDR AI (P0 · concluído)
+A Maria foi reposicionada de "consultora digital" genérica para **SDR AI consultiva B2B** ao serviço da landing page `consenso-shop.eu`. 5 missões:
+1. **EDUCAR** — agentes IA multilingue Consenso, 24/7, 6+ idiomas, Web + WhatsApp + IG + Messenger + Telegram
+2. **VENDER adaptando ao perfil** — CEO=ROI · Marketing=leads · IT=integração · Imobiliária=qualificação
+3. **QUALIFICAR conversacional** — nome → empresa → setor → dor → volume → email (uma pergunta de cada vez)
+4. **FECHAR** — propor demo/reunião + dispara `create_lead` quando tem nome+empresa+email
+5. **DEMO MODE** — simulação imobiliária em 4 fases (compra/arrendamento → tipologia → imóveis → marcação)
+
+**Configuração** (`/app/backend/seed_maria.py`):
+- Nome: "Maria — Consenso SDR AI"
+- Welcome: "Olá! 👋 Sou a Maria, consultora digital da Consenso. Em que posso ajudar o teu negócio hoje?"
+- Avatar: photo de mulher profissional (consenso-shop hero)
+- **Tema atualizado**: azul `#4591CE` (primary) + amarelo `#E4AC1E` (bot accent) — cores oficiais Consenso
+- KB com 12 chunks: empresa, problemas, processo, idiomas, features, preços, integração, canais, casos de uso, contacto
+- Provider: **OpenAI direto** (`gpt-4o-mini`) usando `OPENAI_API_KEY` do env
+- Icebreakers SDR: "Ver planos e preços · Como funciona para imobiliárias · Pedir demonstração real · Quantos idiomas suporta · Como integra com o meu site · Qual o ROI esperado"
+
+**Validação automatizada (8 cenários SDR cold sessions)**:
+| Cenário | Latência | Comportamento |
+|---|---|---|
+| Educate · saudação | 3.89s | CTA pergunta soft |
+| Educate · explicação | 3.43s | 24/7 multilingue |
+| Educate · preços | 3.14s | Link planos |
+| Qualify · interesse | 4.45s | Qualificação automática |
+| Qualify · followup | 5.24s | Resolve fora-de-horas |
+| Convert · demo | 3.24s | Pede nome+empresa |
+| Persona · CEO ROI | 4.94s | ROI + custos |
+| Persona · IT integração | 4.56s | 1 linha de código |
+| **AVG** | **4.11s** | ✅ dentro 3-5s |
+
+### Optimizações de latência (P0 · concluído)
+**De 4.07s → 3.85s → 3.53s avg** ao paralelizar tarefas independentes:
+1. **`analyze` + `retrieve` + `history-fetch` em paralelo** (`asyncio.gather`) — 3 chamadas independentes que antes eram sequenciais
+2. **`execute_actions` + CRM qualification em background** — o utilizador vê a resposta imediatamente; a criação de leads/tickets e a qualificação correm em `asyncio.create_task` após o broadcast
+3. **Fast-path expandido em `analyze.py`** — heurísticas regex para: greeting (já existia), real-estate query (já existia), complaint, support, generic inquiry curta (< 200 chars). LLM analyze só é chamado para mensagens longas (>= 200 chars) sem sinais claros — corte de 70-80% das chamadas LLM analyze
+
+### `_agent_is_configured` aceita env vars (P1 · concluído)
+Quando `api_provider="openai"` e `api_key=""`, o agente agora valida com sucesso se `OPENAI_API_KEY` estiver no env. Permite agentes managed-by-platform sem necessidade de paste manual de tokens.
+
+### Pre-deploy checkup v3.10
+- ✅ Supervisor (backend, frontend, mongodb) RUNNING
+- ✅ Auth + 5 endpoints chave (200)
+- ✅ Widget origin injection bullet-proof
+- ✅ Maria SDR cold reply em 4.82s (alvo 3-5s)
+- ✅ **53 pytest passed** / 0 failed / 42 skipped
+- ✅ Sem hardcoding de URLs preview no código
+- ✅ Cross-domain widget testado em domínio externo
+
+## v3.9 (2026-02) — Dashboard "Saúde dos canais" + pre-deploy checkup
 
 ## v3.9 (2026-02) — Dashboard "Saúde dos canais" + pre-deploy checkup
 

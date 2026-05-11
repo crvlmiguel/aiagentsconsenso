@@ -1,11 +1,16 @@
-"""Cria/atualiza o agente "Maria — Assistente Consenso" no tenant principal.
+"""Cria/atualiza "Maria — Consenso SDR AI" no tenant principal.
 
-Maria representa a Consenso (https://consenso-shop.eu) e tem 3 missões:
-1. EXPLICAR — o que são agentes IA para imobiliárias
-2. VENDER — converter visitantes em pedidos de demonstração
-3. DEMONSTRAR — simular em tempo real um chat de imobiliária
+Maria é o assistente comercial inteligente da Consenso (https://consenso-shop.eu).
+Posicionamento: SDR AI consultiva B2B — educa, qualifica, agenda demos.
 
-Idempotente: re-corre sem duplicar.
+5 missões:
+1. EDUCAR — explicar agentes IA multilingue
+2. VENDER — converter visitantes em leads qualificados
+3. QUALIFICAR — recolher dados (nome, empresa, setor, dimensão, dor, orçamento)
+4. SCORE — classificar lead (quente / morno / frio) via tags
+5. DEMO MODE — simular um chat de imobiliária
+
+Idempotente — re-corre sem duplicar.
 """
 import asyncio
 import os
@@ -18,239 +23,224 @@ from pathlib import Path
 load_dotenv(Path(__file__).parent / ".env")
 
 ADMIN_EMAIL = "admin@consenso-agents.com"
-AGENT_NAME = "Maria — Assistente Consenso"
+AGENT_NAME = "Maria — Consenso SDR AI"
 
 
 def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-SYSTEM_PROMPT = """És a Maria — Consenso AI, consultora digital de tecnologia imobiliária da Consenso (https://consenso-shop.eu).
-A Consenso desenvolve agentes IA multilingue para imobiliárias em Portugal.
+SYSTEM_PROMPT = """És a Maria — SDR AI da Consenso (https://consenso-shop.eu).
+A Consenso vende agentes IA multilingue chave-na-mão para empresas, agências e imobiliárias.
 
-# IDENTIDADE
-- Nome: Maria (Consenso AI)
-- Papel: Consultora digital imobiliária — vendedora B2B + sistema de demonstração ao vivo
-- Tom: profissional, consultivo, direto e próximo
-- Linguagem: Português Europeu natural (NUNCA pt-BR)
+# PAPEL
+- És assistente de VENDAS CONSULTIVA B2B (não suporte técnico)
+- Objetivo: converter visitantes em pedidos de DEMONSTRAÇÃO com a equipa
+- Tom: profissional, consultivo, próximo, sempre orientado a valor
+- Idioma: Português Europeu (NUNCA pt-BR)
+- Cores marca: azul #4591CE + amarelo #E4AC1E
 
-# AS TUAS 3 MISSÕES (todas ao mesmo nível)
+# 5 MISSÕES (todas ao mesmo nível)
 
-## 1) EXPLICAR — sempre baseada no scraping do site Consenso
-Explicar como funcionam os agentes IA para imobiliárias:
-- Atendem 24/7 em qualquer idioma (PT, EN, FR, DE, ES, NL)
-- Conhecem o portefólio do cliente (imóveis, preços, características)
-- Apresentam imóveis com cards visuais
-- Qualificam leads automaticamente (tipologia, zona, orçamento, perfil)
-- Marcam visitas
-- Encaminham para humanos quando necessário
-- Funcionam em Website, WhatsApp, Instagram, Messenger, Telegram
+## 1) EDUCAR
+Explica que o agente Consenso atende 24/7 em PT/EN/FR/DE/ES/NL, conhece o portefólio do cliente, qualifica leads, marca reuniões, funciona em Website + WhatsApp + Instagram + Messenger + Telegram, e encaminha para humano com histórico.
 
-Se não tiveres a certeza sobre algo:
-"Vou confirmar essa informação para te dar uma resposta mais precisa 😊"
+## 2) VENDER — adaptar ao perfil
+- **CEO** → ROI, redução de custos, escala sem contratar
+- **Marketing** → leads qualificados 24/7, conversão multilingue
+- **IT** → integração 1 linha de código, zero manutenção
+- **Imobiliária** → qualificação automática, marcação de visitas
 
-## 2) VENDER — funil de conversão
-Sempre que detectes interesse, conduz o utilizador para:
-- Pedido de demonstração personalizada
-- Agendamento de reunião
-- Contacto comercial
+## 3) QUALIFICAR — uma pergunta de cada vez
+Recolhe naturalmente: nome → empresa → setor → dor → volume → email.
+NUNCA empilhes 3 perguntas. Uma só por turno.
 
-Frases-tipo (use uma destas SEMPRE no fim de uma resposta de venda):
-- "Queres que te mostre isto aplicado à tua imobiliária numa demonstração rápida?"
-- "Posso pedir à nossa equipa para te enviar uma proposta à medida?"
-- "Queres agendar 15 minutos com a nossa equipa para uma demonstração personalizada?"
+## 4) FECHAR — quando detectes interesse claro
+Usa UMA destas frases:
+- "Queres ver isto aplicado ao teu negócio numa demonstração rápida?"
+- "Reservamos 15 minutos com a equipa para te mostrar o resultado real?"
+Quando tiveres nome+empresa+email → dispara create_lead.
 
-Antes de propor demo, capta naturalmente: nome, email e (se possível) nome da imobiliária.
+## 5) DEMO MODE — simulação imobiliária
+Triggers: "demo", "ver como funciona", "testar", "exemplo".
+4 fases, UMA mensagem de cada vez:
+1. "Vou simular um atendimento real." + "[Como agente] Olá! Procura comprar ou arrendar?"
+2. "[Como agente] Excelente. Tipologia (T1, T2, T3, moradia)? Que zona?"
+3. "[Como agente] Tenho 2 opções: 🏠 T2 Chiado 380k · 🏠 T2 Belém 340k. Orçamento e crédito?"
+4. "[Como agente] Marca visita? Terça 17h ou quinta 11h?"
+Depois sai: "É assim que funciona 😊 Tudo em segundos, sem intervenção humana." + "Queres isto no teu negócio?"
 
-## 3) DEMO MODE — SIMULAÇÃO REAL IMOBILIÁRIA (CRÍTICO)
-Triggers: "demonstração", "ver como funciona", "testar", "exemplo", "mostra", "como responde aos clientes".
+# REGRAS RÍGIDAS
+- Mensagens curtas (1-2 frases, máx 280 chars)
+- 2 balões úteis: contexto + pergunta/CTA
+- NUNCA inventes features
+- NUNCA prometas resultados irreais (ex: "+300% conversão")
+- NUNCA pt-BR
+- NUNCA empilhes perguntas — uma de cada vez
 
-Quando ativado, faz uma simulação interativa em 4 fases (NÃO TODAS NUMA SÓ MENSAGEM — vai uma de cada vez):
-
-**Fase 1 — Cumprimento + qualificação inicial** (a tua mensagem):
-"Perfeito 😊 Vou simular um atendimento real para veres."
-Follow-up: "[Como agente da Imobiliária Lisboa] Olá! Está à procura de comprar ou arrendar?"
-
-**Fase 2 — Após resposta do utilizador** — qualificar:
-"[Como agente] Excelente. Que tipologia procura — T1, T2, T3, moradia? E em que zona?"
-
-**Fase 3 — Apresentar imóveis fictícios + orçamento**:
-"[Como agente] Tenho 2 opções perfeitas:
-🏠 T2 no Chiado · 380.000€ · 2 quartos, vista de rio
-🏠 T2 em Belém · 340.000€ · varanda, garagem
-Qual o seu orçamento aproximado e precisa de simulação de crédito?"
-
-**Fase 4 — Agendamento + regresso ao modo Maria**:
-"[Como agente] Quer marcar uma visita esta semana? Tenho terça às 17h ou quinta às 11h disponível."
-
-Após confirmação OU 2-3 turnos da simulação, sai do modo demo:
-"E é assim que funciona 😊 Em segundos, qualifiquei o cliente, apresentei imóveis e marquei visita — tudo sem intervenção humana."
-Follow-up: "Queres que implemente isto na tua imobiliária?"
-
-# REGRAS OBRIGATÓRIAS (não quebrar)
-- NUNCA inventes features fora do conhecimento do site Consenso
-- NUNCA prometas resultados irreais (X% de aumento, etc.)
-- NUNCA saias do contexto imobiliário
-- Mensagens curtas (estilo WhatsApp), max 280 chars por balão
-- Divide em 2 balões quando útil: contexto + pergunta/CTA
-- Em qualquer ponto, se o utilizador estiver claramente interessado, propõe agendar reunião
-- Sempre PT-PT natural (NUNCA pt-BR)
-
-# BENEFÍCIOS-CHAVE A REFERIR (do site)
-- Atendimento 24/7 sem intervenção da equipa
-- Multilingue com deteção automática (PT, EN, FR, DE, ES, NL)
-- Conhece o portefólio da imobiliária
-- Qualifica leads automaticamente
-- Marca visitas
-- Disponível em Website, WhatsApp, Instagram, Messenger
-- Otimização multilingue do website incluída
-- Implementação em 1-3 semanas
-- Subscrição sem fidelização e sem risco (reembolso após onboarding se não encaixar)
-- Integração simples (WordPress, Shopify, Webflow, qualquer plataforma)
+# PROVA & GARANTIA
+- Mensalidade fixa, sem fidelização
+- Reembolso integral antes do go-live se não encaixar
+- Implementação 1-3 semanas chave-na-mão
+- Casos: imobiliárias, e-commerce, agências, serviços, turismo
 """
 
 KNOWLEDGE_TEXT = """SITE: https://consenso-shop.eu
-TÍTULO: Consenso — Chatbots Multilingue com Inteligência Artificial para Imobiliárias
+TÍTULO: Consenso — Chatbots Multilingue com Inteligência Artificial para Empresas e Imobiliárias
 
-# O QUE A CONSENSO FAZ
-Cria agentes IA multilingue para imobiliárias em Portugal. Cada agente:
-- Conhece o portefólio do cliente
-- Apresenta imóveis com cards
-- Qualifica compradores
-- Marca visitas
-- Responde em vários idiomas (PT, EN, FR, DE, ES, NL)
-- Disponível 24/7
-- Funciona em Website, WhatsApp, Instagram, Messenger, Telegram
+# QUEM É A CONSENSO
+Empresa portuguesa que desenvolve agentes IA multilingue chave-na-mão para empresas, agências e imobiliárias. Foco: comunicação global automatizada e geração de leads qualificados.
 
-# PROBLEMAS QUE RESOLVE
+# O QUE FAZEMOS
+Cada agente IA Consenso:
+- Conhece o portefólio do cliente (produtos, serviços, imóveis)
+- Apresenta opções com cards visuais
+- Qualifica compradores/leads
+- Marca reuniões e visitas
+- Responde 24/7 em PT, EN, FR, DE, ES, NL (e mais sob consulta)
+- Disponível em Website, WhatsApp, Instagram, Messenger, Telegram
+- Encaminha para humanos com histórico completo
+
+# PROBLEMAS QUE RESOLVEMOS
 1. Ausência de resposta fora do horário de atendimento
-2. Qualificação lenta de contactos
+2. Qualificação lenta e manual de contactos
 3. Leads perdidos sem seguimento
 4. Equipa a perder tempo com perguntas repetitivas
-5. Visitas que nunca chegam a ser marcadas
+5. Reuniões/visitas que nunca chegam a ser marcadas
 6. Clientes internacionais sem apoio no seu idioma
+7. Custos operacionais altos com atendimento humano básico
+8. Falta de escala — não dá para contratar mais para responder a mais leads
 
-# COMO IMPLEMENTAMOS (3 PASSOS)
-1. ANALISAMOS — entendemos o trabalho da equipa, tipo de imóveis, fluxo de contactos
-2. CONFIGURAMOS — preparamos o assistente para responder a FAQs, qualificar interessados, apresentar imóveis, recolher dados
-3. LANÇAMOS — pós-implementação, acompanhamos performance para melhorar respostas e conversões (chave-na-mão)
+# COMO IMPLEMENTAMOS (3 PASSOS · CHAVE-NA-MÃO)
+1. **ANALISAMOS** — entrevista com a equipa, tipos de serviços/imóveis, fluxo de contactos, FAQs comuns
+2. **CONFIGURAMOS** — preparamos o agente: knowledge base, tom de voz, fluxos de qualificação, integrações
+3. **LANÇAMOS** — pós-implementação, acompanhamos performance e otimizamos continuamente
 
 # IDIOMAS SUPORTADOS
-Português (PT/BR), Inglês, Francês, Espanhol, Alemão, Holandês, outros sob consulta.
-Deteção automática do idioma em tempo real, sem intervenção manual.
+Português (PT/BR), Inglês, Francês, Espanhol, Alemão, Holandês — deteção automática em tempo real sem intervenção manual. Outros idiomas sob consulta.
 
-# PLANOS
-Mensalidade fixa · Sem fidelização · IVA não incluído.
-Após subscrição: reunião de onboarding para alinhar abordagem. Se não fizer sentido, reembolso integral antes da personalização. (Detalhes específicos de planos: encaminhar para a equipa via formulário em consenso-shop.eu/contacto/)
+# PLANOS E PREÇOS
+- Mensalidade fixa, sem fidelização, IVA não incluído
+- Reunião de onboarding incluída
+- Subscrição 100% segura: se na fase de onboarding considerar que não faz sentido, reembolso integral antes do go-live
+- Para preços específicos, encaminhar para https://consenso-shop.eu/#planos ou pedir contacto comercial via https://consenso-shop.eu/contacto/
 
-# FAQs
-- Multilingue automático? Sim, deteção em tempo real, transição natural sem intervenção manual.
-- WhatsApp? Sim, WhatsApp Business API incluído em todos os planos.
-- Tempo de implementação? 1 a 3 semanas conforme complexidade.
-- Integração com website? Sim, via código simples — WordPress, Shopify, Webflow, qualquer plataforma. Sem recriar o site.
-- Encaminha para humano? Sim, em qualquer momento com todo o histórico disponível.
-- Atualizações pós-implementação? Sim, a equipa Consenso gere as atualizações.
-- Personalizado? Sim, cada chatbot é construído com o conhecimento específico da imobiliária (serviços, tom, portefólio).
-- Serve para vendas? Sim — apresenta serviços, qualifica leads, agenda demonstrações, encaminha o cliente no processo comercial.
+# FAQ
+- **Multilingue automático?** Sim, deteção em tempo real, transição natural sem intervenção manual.
+- **WhatsApp incluído?** Sim, WhatsApp Business API incluído em todos os planos.
+- **Instagram / Messenger?** Sim, integração via Meta Business — incluída.
+- **Tempo de implementação?** 1 a 3 semanas, conforme complexidade.
+- **Integração com website?** Sim — uma linha de código compatível com WordPress, Shopify, Webflow, Wix ou qualquer plataforma. Não é necessário recriar o site.
+- **Encaminha para humano?** Sim, em qualquer momento, com todo o histórico.
+- **Atualizações pós-implementação?** Sim, a equipa Consenso gere as atualizações.
+- **Personalizado?** Sim, cada chatbot é construído com o conhecimento, tom e portefólio específico do cliente.
+- **Serve para vendas?** Sim — apresenta serviços, qualifica leads, agenda demos, encaminha o cliente no funil.
+- **Substitui a equipa humana?** Não — liberta a equipa de tarefas repetitivas e qualifica leads para que humanos foquem nas conversas importantes.
+- **Funciona para e-commerce / serviços?** Sim — embora o nosso foco principal sejam imobiliárias, adaptamos a qualquer setor.
+
+# BENEFÍCIOS-CHAVE PARA B2B
+- **Redução de custos**: substitui 1ª linha de atendimento básico (FAQ + qualificação)
+- **Aumento de leads qualificados**: captura 24/7 inclusive fora de horário
+- **Escala internacional**: atende clientes globais no seu idioma sem contratar staff
+- **Tempo de resposta**: < 5 segundos, vs minutos/horas com humanos
+- **Conversão**: leads pré-qualificados chegam à equipa com contexto e prontos a fechar
 
 # CONTACTO
-Formulário: https://consenso-shop.eu/contacto/
-Site principal: https://consenso-shop.eu
+- Formulário: https://consenso-shop.eu/contacto/
+- Site principal: https://consenso-shop.eu
+- LinkedIn: Consenso Global — International Business Development
 """
 
-# Knowledge chunks for retrieval (split by topic)
 KNOWLEDGE_CHUNKS = [
     {
-        "topic": "O que é a Consenso",
-        "text": "A Consenso desenvolve agentes IA multilingue para imobiliárias em Portugal. "
-                "Cada agente conhece o portefólio do cliente, apresenta imóveis, qualifica compradores, marca visitas "
-                "e responde em PT, EN, FR, DE, ES, NL — disponível 24/7 em Website, WhatsApp, Instagram, Messenger e Telegram. "
+        "topic": "Quem é a Consenso",
+        "text": "A Consenso é uma empresa portuguesa que desenvolve agentes IA multilingue chave-na-mão para empresas, agências e imobiliárias. "
+                "Cada agente atende 24/7 em PT, EN, FR, DE, ES, NL, conhece o portefólio do cliente, qualifica leads e marca reuniões. "
                 "Site: https://consenso-shop.eu",
     },
     {
         "topic": "Problemas que resolvemos",
-        "text": "Os agentes IA da Consenso resolvem: ausência de resposta fora de horário, qualificação lenta de contactos, "
-                "leads perdidos sem seguimento, equipa a perder tempo com perguntas repetitivas, visitas que nunca são marcadas, "
-                "e clientes internacionais sem apoio no seu idioma.",
+        "text": "Resolvemos: ausência de resposta fora de horário, qualificação manual lenta, leads perdidos, equipa a perder tempo com perguntas repetitivas, "
+                "reuniões nunca marcadas, clientes internacionais sem apoio no idioma, custos altos com atendimento básico, e falta de escala.",
     },
     {
-        "topic": "Implementação em 3 passos",
-        "text": "Implementamos em 3 passos: 1) ANALISAMOS a sua imobiliária — equipa, tipos de imóveis, fluxo de contactos. "
-                "2) CONFIGURAMOS o chatbot à medida — responde a FAQs, qualifica interessados, apresenta imóveis, recolhe dados. "
-                "3) LANÇAMOS chave-na-mão — acompanhamos performance para melhorar respostas e aumentar conversões.",
+        "topic": "Como implementamos (3 passos chave-na-mão)",
+        "text": "1) ANALISAMOS — entrevista com a equipa, fluxos, FAQs. "
+                "2) CONFIGURAMOS — knowledge base, tom de voz, qualificação, integrações. "
+                "3) LANÇAMOS — chave-na-mão com acompanhamento contínuo. Implementação em 1-3 semanas.",
     },
     {
         "topic": "Multilingue automático",
-        "text": "Suportamos PT (PT e BR), EN, FR, ES, DE, NL e outros sob consulta. "
-                "A deteção do idioma é automática em tempo real — sem intervenção manual. "
-                "Adicionalmente, oferecemos otimização multilingue do website (conteúdos antigos e novos) "
-                "incluída nas subscrições, para reforçar a imagem internacional da imobiliária.",
+        "text": "Suportamos PT, EN, FR, DE, ES, NL com deteção automática em tempo real. Outros idiomas sob consulta. "
+                "Não há intervenção manual — o agente alterna de idioma a meio da conversa se o cliente mudar.",
     },
     {
         "topic": "Funcionalidades incluídas",
-        "text": "Configuração à medida, atendimento multilingue inteligente, treinado com o portefólio do cliente, "
-                "transferência para agente humano com todo o histórico, qualificação automática de leads, "
-                "presença em Website, WhatsApp, Instagram e mais, integração com CRM e sistemas internos, "
-                "gestão e otimização contínua pela equipa Consenso.",
+        "text": "Atendimento multilingue 24/7, treino com o portefólio do cliente, transferência para humano com histórico, "
+                "qualificação automática de leads, presença em Website + WhatsApp + Instagram + Messenger + Telegram, "
+                "integração com CRM/sistemas internos, gestão e otimização contínua pela equipa Consenso.",
     },
     {
-        "topic": "Planos e subscrição",
-        "text": "Mensalidade fixa, sem fidelização, IVA não incluído. "
-                "Após subscrição há reunião de onboarding para alinhar abordagem. "
-                "Subscrição 100% segura: se nessa fase considerar que não faz sentido, "
-                "pode cancelar antes da personalização com reembolso do valor pago. "
-                "Para detalhes de preço, recomendar ir a https://consenso-shop.eu/#planos ou pedir contacto.",
+        "topic": "Planos, preços e garantia",
+        "text": "Mensalidade fixa, sem fidelização, IVA não incluído. Reunião de onboarding incluída. "
+                "Garantia: se na fase de onboarding considerar que não faz sentido, reembolso integral antes do go-live — risco zero. "
+                "Preços específicos em https://consenso-shop.eu/#planos ou via contacto comercial.",
     },
     {
-        "topic": "Tempo e integração",
-        "text": "Implementação entre 1 a 3 semanas conforme complexidade — inclui análise, configuração, testes e onboarding. "
-                "Integração no website é feita com um código simples, compatível com WordPress, Shopify, Webflow e qualquer outra plataforma — não é necessário recriar o site.",
+        "topic": "Tempo e integração técnica",
+        "text": "Implementação em 1 a 3 semanas. Integração no website com 1 linha de código — compatível com WordPress, Shopify, Webflow, Wix, "
+                "ou qualquer plataforma. Não é necessário recriar o site. Zero manutenção do lado do cliente.",
     },
     {
-        "topic": "WhatsApp e canais",
-        "text": "Sim, oferecemos chatbots para o WhatsApp Business API, incluído em todos os planos. "
-                "O bot pode também transferir o cliente para um colaborador humano em qualquer momento, "
-                "com todo o histórico da conversa disponível.",
+        "topic": "WhatsApp, Instagram, Messenger, Telegram",
+        "text": "WhatsApp Business API incluído em todos os planos. Instagram Direct e Facebook Messenger via Meta Business — incluídos. "
+                "Telegram incluído. Todos os canais com o mesmo agente IA e histórico unificado.",
     },
     {
-        "topic": "Personalização e atualização",
-        "text": "Cada chatbot é construído com conhecimento específico da imobiliária: serviços, produtos, tom de voz, portefólio. "
-                "As respostas e fluxos podem ser atualizados sempre que necessário — a equipa Consenso gere as atualizações.",
+        "topic": "Personalização e gestão contínua",
+        "text": "Cada chatbot é construído com o conhecimento, tom de voz e portefólio do cliente. Atualizações pós-launch geridas pela equipa Consenso — "
+                "o cliente não precisa de equipa técnica. Otimização contínua baseada em performance real (conversões, FAQs detetadas, etc.).",
     },
     {
-        "topic": "Vendas e qualificação",
-        "text": "O chatbot serve para vendas: apresenta serviços, qualifica leads, agenda demonstrações e encaminha o cliente "
-                "no processo comercial. Capta nome, email, telefone, tipo de imóvel procurado, zona, orçamento e perfil "
-                "(habitação própria / investimento / precisa de crédito).",
+        "topic": "Vendas, qualificação de leads e ROI",
+        "text": "O agente faz: apresenta serviços/produtos, qualifica leads (nome, email, setor, dor, orçamento), agenda demonstrações, "
+                "encaminha o cliente no funil. Reduz custos de atendimento básico e aumenta leads qualificados — equipa humana foca em fechar. "
+                "ROI típico: substitui 1-2 vagas de SDR júnior por uma fração do custo, com escala infinita e 24/7.",
     },
     {
-        "topic": "Contacto",
-        "text": "Para falar com a equipa Consenso e pedir uma demonstração personalizada, "
-                "use o formulário em https://consenso-shop.eu/contacto/ ou peça aqui ao chatbot que registe o contacto.",
+        "topic": "Casos de uso B2B",
+        "text": "Foco principal: imobiliárias (qualificação de compradores, marcação de visitas, apresentação de imóveis). "
+                "Também adaptável a: e-commerce (recomendação de produtos, recuperação de carrinho), agências (qualificação inbound), "
+                "serviços profissionais (triagem de pedidos, agendamento), turismo (concierge multilingue).",
+    },
+    {
+        "topic": "Contacto e demo",
+        "text": "Para falar com a equipa Consenso e pedir uma demonstração personalizada: formulário em https://consenso-shop.eu/contacto/ "
+                "ou recolher dados aqui (nome, empresa, email) — a Maria encaminha automaticamente para a equipa comercial.",
     },
 ]
 
 ICEBREAKERS = [
-    "Como posso automatizar o atendimento da minha imobiliária?",
-    "🎬 Quero ver uma demonstração real",
-    "Como funciona a marcação automática de visitas?",
-    "Como respondo a leads 24/7?",
-    "Isto integra com o meu site?",
-    "Quero aumentar conversões de leads",
+    "💰 Ver planos e preços",
+    "🏠 Como funciona para imobiliárias?",
+    "🎬 Pedir demonstração real",
+    "🌍 Quantos idiomas suporta?",
+    "⚙️ Como integra com o meu site?",
+    "📈 Qual o ROI esperado?",
 ]
 
-WELCOME_MESSAGE = "Olá! 👋 Sou a Maria, consultora digital da Consenso. Como posso ajudar a sua imobiliária?"
+WELCOME_MESSAGE = "Olá! 👋 Sou a Maria, consultora digital da Consenso. Em que posso ajudar o teu negócio hoje?"
 
-# Photo from consenso-shop.eu hero section
+# Photo from consenso-shop.eu hero
 AVATAR_URL = "https://static-assets-v2.s3.us-east-2.amazonaws.com/uploads/1776262970630_donna-result.jpeg"
 
-# Brand theme — gold (premium / CTA) + blue (AI / tech)
+# Brand theme — Consenso brand colors
 THEME = {
-    "primary": "#c9a84d",         # CTA, user bubble, send button, header
-    "primary_dark": "#a88838",    # Header gradient end
-    "primary_soft": "#FAF4E2",    # Avatar bg, focus ring
-    "primary_border": "#E8D8A8",  # Icebreakers border
-    "bot": "#4e7bfa",             # Bot accent (links, prices)
+    "primary": "#4591CE",         # Azul Consenso — CTA, user bubble, header
+    "primary_dark": "#2C6FA8",    # Header gradient end
+    "primary_soft": "#E8F1F9",    # Avatar bg, focus ring, soft surfaces
+    "primary_border": "#C7DDF0",  # Icebreakers border
+    "bot": "#E4AC1E",             # Amarelo Consenso — bot accent, prices, highlights
 }
 
 
@@ -271,7 +261,7 @@ async def run():
     if existing_src:
         source_id = existing_src["id"]
         print(f"  · Data source existente: {source_id[:8]}…")
-        # Reset chunks
+        # Reset chunks for fresh KB
         await db.data_chunks.delete_many({"source_id": source_id})
     else:
         source_id = str(uuid.uuid4())
@@ -289,7 +279,7 @@ async def run():
         print(f"  · Data source criada: {source_id[:8]}…")
 
     # Upsert chunks
-    for i, ch in enumerate(KNOWLEDGE_CHUNKS):
+    for ch in KNOWLEDGE_CHUNKS:
         await db.data_chunks.insert_one({
             "id": str(uuid.uuid4()),
             "tenant_id": tid,
@@ -302,7 +292,6 @@ async def run():
         })
     print(f"  · {len(KNOWLEDGE_CHUNKS)} chunks indexados")
 
-    # Refresh source counts
     await db.data_sources.update_one(
         {"id": source_id},
         {"$set": {"items": len(KNOWLEDGE_CHUNKS), "chunks": len(KNOWLEDGE_CHUNKS),
@@ -319,27 +308,33 @@ async def run():
         "active": True,
         "avatar_url": AVATAR_URL,
         "theme": THEME,
-        "role": "Consultora digital imobiliária — Consenso AI",
-        "goal": "Explicar agentes IA para imobiliárias, demonstrar uma simulação real e converter visitantes em pedidos de demonstração.",
-        "tone": "Consultiva, profissional, direta e próxima.",
-        "rules": "Mensagens curtas (1-2 frases). Português Europeu. Nunca inventar features. Modo demo quando o utilizador pedir 'ver como funciona'. Em caso de dúvida, propõe contacto humano.",
+        "role": "Consultora digital comercial — Consenso SDR AI",
+        "goal": "Educar empresas sobre agentes IA multilingue, qualificar visitantes (nome, empresa, setor, dor, contacto) e converter em pedidos de demonstração personalizada.",
+        "tone": "Consultiva, profissional, próxima e orientada a conversão.",
+        "rules": (
+            "Mensagens curtas (1-2 frases). Português Europeu. Uma pergunta de qualificação por turno. "
+            "Adapta linguagem ao perfil (CEO=ROI, IT=integração, Marketing=leads). "
+            "Nunca prometas resultados irreais. Modo demo quando pedem 'ver como funciona'. "
+            "Captura nome+empresa+email naturalmente antes de propor demo. "
+            "Em interesse claro, propõe sempre reunião com a equipa."
+        ),
         "system_prompt": SYSTEM_PROMPT,
         "knowledge": KNOWLEDGE_TEXT,
         "default_language": "pt",
         "icebreakers": ICEBREAKERS,
         "welcome_message": WELCOME_MESSAGE,
-        "api_provider": "emergent",
-        "api_key": "",
-        "model_provider": "auto",
-        "model_name": "gemini-2.5-flash",
+        "api_provider": "openai",
+        "api_key": "",  # Uses OPENAI_API_KEY env var via router
+        "model_provider": "openai",
+        "model_name": "gpt-4o-mini",
         "data_source_ids": [source_id],
         "tools": [{"key": "create_lead", "enabled": True}],
         "channels": {
-            "webchat": {"active": True},
-            "whatsapp": {"active": False},
-            "telegram": {"active": False},
-            "instagram": {"active": False},
-            "messenger": {"active": False},
+            "webchat": {"enabled": True},
+            "whatsapp": {"enabled": False},
+            "telegram": {"enabled": False},
+            "instagram": {"enabled": False},
+            "messenger": {"enabled": False},
         },
         "email_config": {},
         "config": {
@@ -361,7 +356,6 @@ async def run():
         await db.agents.insert_one(agent_payload)
         print(f"  · Agente Maria criado: {agent_id[:8]}…")
 
-    # Final state
     print("\n=== AGENTES NO TENANT ===")
     async for a in db.agents.find({"tenant_id": tid}, {"_id": 0}):
         print(f"  · {a['name']:36} | sources={len(a.get('data_source_ids') or [])} | id={a['id'][:8]}…")
