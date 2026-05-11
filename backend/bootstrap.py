@@ -54,65 +54,101 @@ async def _ensure_admin(db) -> str:
 
 
 async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[dict]):
-    """Create or update an agent with its knowledge base.
-    Idempotent — only creates if no agent of that name exists in the tenant."""
+    """Create-or-update an agent + its knowledge base.
+
+    Idempotent design:
+    - **Always overwrites** content fields (system_prompt, knowledge text, theme,
+      avatar, welcome_message, icebreakers, role, goal). This ensures that every
+      deploy ships the latest seeded copy without breaking existing agents.
+    - **Always rebuilds** the knowledge base chunks (re-indexes the linked
+      data_source) so the KB always matches the seed file.
+    - **Preserves** user-edited fields: channels (tokens, verify_tokens),
+      api_key, tools toggles, email_config, custom rules/tone — these are NOT
+      overwritten.
+    """
     name = agent_def["name"]
     existing = await db.agents.find_one(
         {"tenant_id": tenant_id, "name": {"$regex": name.split("—")[0].strip(), "$options": "i"}},
         {"_id": 0},
     )
-    if existing:
-        return  # do not touch user-edited agents
 
-    # Build data source
-    source_id = str(uuid.uuid4())
     src_name = agent_def.get("kb_name", f"{name} — KB")
-    await db.data_sources.insert_one({
-        "id": source_id, "tenant_id": tenant_id, "name": src_name,
-        "type": "knowledge_base", "url": agent_def.get("kb_url", ""),
-        "items": len(kb), "chunks": len(kb),
-        "indexed_at": _now(), "created_at": _now(),
-    })
+
+    # ----- KB upsert -----
+    src = await db.data_sources.find_one(
+        {"tenant_id": tenant_id, "name": src_name}, {"_id": 0, "id": 1},
+    )
+    if src:
+        source_id = src["id"]
+        # Wipe & re-index chunks (KB content may have changed)
+        await db.data_chunks.delete_many({"source_id": source_id})
+    else:
+        source_id = str(uuid.uuid4())
+        await db.data_sources.insert_one({
+            "id": source_id, "tenant_id": tenant_id, "name": src_name,
+            "type": "knowledge_base", "url": agent_def.get("kb_url", ""),
+            "items": len(kb), "chunks": len(kb),
+            "indexed_at": _now(), "created_at": _now(),
+        })
     for ch in kb:
         await db.data_chunks.insert_one({
             "id": str(uuid.uuid4()), "tenant_id": tenant_id, "source_id": source_id,
             "kind": "knowledge", "title": ch["topic"], "text": ch["text"],
             "meta": {"topic": ch["topic"]}, "indexed_at": _now(),
         })
+    await db.data_sources.update_one(
+        {"id": source_id},
+        {"$set": {"items": len(kb), "chunks": len(kb),
+                  "url": agent_def.get("kb_url", ""), "indexed_at": _now()}},
+    )
 
-    # Build agent
-    agent_id = str(uuid.uuid4())
-    await db.agents.insert_one({
-        "id": agent_id, "tenant_id": tenant_id,
+    # ----- Agent upsert: refresh content fields, keep user-edited config -----
+    # Fields that are ALWAYS refreshed from the seed file (content):
+    content_patch = {
         "name": name,
         "active": True,
         "avatar_url": agent_def.get("avatar_url", ""),
         "theme": agent_def.get("theme", {}),
         "role": agent_def.get("role", ""),
         "goal": agent_def.get("goal", ""),
-        "tone": agent_def.get("tone", ""),
-        "rules": agent_def.get("rules", ""),
         "system_prompt": agent_def["system_prompt"],
         "knowledge": "\n\n".join(c["text"] for c in kb),
-        "default_language": "pt",
         "icebreakers": agent_def.get("icebreakers", []),
         "welcome_message": agent_def.get("welcome_message", "Olá! Como posso ajudar?"),
-        "api_provider": "openai", "api_key": "",
+        "default_language": "pt",
+        "api_provider": "openai",
         "model_provider": "openai", "model_name": "gpt-4o-mini",
         "data_source_ids": [source_id],
-        "tools": [{"key": "create_lead", "enabled": True}],
-        "channels": {
-            "webchat": {"active": True},
-            "whatsapp": {"active": False},
-            "telegram": {"active": False},
-            "instagram": {"active": False},
-            "messenger": {"active": False},
-        },
-        "email_config": {},
-        "config": {"max_history": 24, "lead_capture_required": True},
-        "created_at": _now(), "updated_at": _now(),
-    })
-    logger.info(f"[bootstrap] created agent '{name}' ({agent_id[:8]}…)")
+        "updated_at": _now(),
+    }
+
+    if existing:
+        await db.agents.update_one(
+            {"id": existing["id"]},
+            {"$set": content_patch},
+        )
+        logger.info(f"[bootstrap] refreshed agent content '{name}' ({existing['id'][:8]}…)")
+    else:
+        agent_id = str(uuid.uuid4())
+        await db.agents.insert_one({
+            "id": agent_id, "tenant_id": tenant_id,
+            **content_patch,
+            "api_key": "",
+            "tone": agent_def.get("tone", ""),
+            "rules": agent_def.get("rules", ""),
+            "tools": [{"key": "create_lead", "enabled": True}],
+            "channels": {
+                "webchat": {"enabled": True},
+                "whatsapp": {"enabled": False},
+                "telegram": {"enabled": False},
+                "instagram": {"enabled": False},
+                "messenger": {"enabled": False},
+            },
+            "email_config": {},
+            "config": {"max_history": 24, "lead_capture_required": True},
+            "created_at": _now(),
+        })
+        logger.info(f"[bootstrap] created agent '{name}' ({agent_id[:8]}…)")
 
 
 async def _ensure_abby(db, tenant_id: str):
@@ -266,9 +302,9 @@ async def bootstrap(db):
         )
 
         await _ensure_agent_with_kb(db, tenant_id, {
-            "name": "Maria — Assistente Consenso",
-            "role": "Consultora digital imobiliária — Consenso AI",
-            "goal": "Explicar agentes IA para imobiliárias, demonstrar uma simulação real e converter visitantes em pedidos de demonstração.",
+            "name": "Maria — Consenso SDR AI",
+            "role": "SDR AI Consultiva B2B — Consenso (consenso-shop.eu)",
+            "goal": "Educar empresas sobre agentes IA multilingue, qualificar visitantes (nome, empresa, setor, dor, contacto) e converter em pedidos de demonstração personalizada.",
             "system_prompt": MARIA_PROMPT,
             "icebreakers": MARIA_ICE, "welcome_message": MARIA_WELCOME,
             "avatar_url": MARIA_AVATAR, "theme": MARIA_THEME,

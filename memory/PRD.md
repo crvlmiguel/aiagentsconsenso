@@ -1,10 +1,46 @@
-# Consenso Plus — PRD (v3.12)
+# Consenso Plus — PRD (v3.13)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token em tempo real**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.13 (2026-02) — Bootstrap content-upsert (hotfix Maria SDR em produção)
+
+### Bug · Maria não atualizou em produção após deploy v3.12 (P0 · concluído)
+**Sintoma**: O utilizador fez deploy mas a Maria continuou com o nome antigo ("Maria — Assistente Consenso"), prompt antigo e tema antigo (azul `#0069FE` em vez de `#4591CE`).
+
+**Causa raiz**: `bootstrap.py::_ensure_agent_with_kb()` tinha lógica `if existing: return` — protegia agentes editados pelo utilizador mas também impedia atualizações de **conteúdo seedado** entre deploys. Como a Maria já existia no DB de produção, o bootstrap saltava-a sempre.
+
+**Fix** (`bootstrap.py::_ensure_agent_with_kb`):
+- **Upsert em cada deploy** dos campos de conteúdo: `name`, `system_prompt`, `knowledge`, `theme`, `avatar_url`, `welcome_message`, `icebreakers`, `role`, `goal`, `default_language`, `api_provider`, `model_*`, `data_source_ids`, `updated_at`
+- **Preserva campos editados pelo utilizador**: `channels` (tokens, verify_token), `api_key`, `tools`, `email_config`, `tone`, `rules`, `config`, `created_at`
+- **Wipe + re-index do KB** do data_source ligado (chunks são fonte de verdade do `seed_*.py`)
+- Nome bootstrap atualizado: "Maria — Assistente Consenso" → "Maria — Consenso SDR AI"
+- Role/goal sincronizados com o novo posicionamento SDR
+
+**Validação local** (simulando state de produção):
+1. ✅ Forço Maria para state antigo (name + prompt + tema antigos)
+2. ✅ Corro `await bootstrap(db)`
+3. ✅ Maria volta a SDR AI: prompt SDR completo, tema `#4591CE`, welcome novo, 6 icebreakers
+
+### DB hygiene
+- Limpos 13 tenants `TestCo_*` (resíduo de runs do testing agent) + 1 agent órfão
+- DB final: 2 tenants (Consenso + Imo), 4 agentes de produção, todos `api_provider=openai`
+
+### Validação final
+- ✅ **70/70 pytest passed**
+- ✅ TTFT Maria (cold): **0.68s** com 8 chunks
+- ✅ Bootstrap idempotente testado em DB simulado prod
+
+### Como funciona o deploy daqui em diante
+1. Quando faz `Deploy`, o `bootstrap.py` corre no startup do backend de produção
+2. Detecta Maria existente → faz upsert do conteúdo (mantém tokens e canais que tenha configurado)
+3. Em poucos segundos a produção tem a Maria SDR AI com as cores Consenso, prompt novo, e knowledge base atualizada
+4. Aplica-se também à Abby, StayLocal e Tejo — cada vez que evoluímos um system_prompt ou KB, o próximo deploy refresca em produção automaticamente
+
+## v3.12 (2026-02) — Analytics avançada + typing adaptativo + 4 agentes openai
 
 ## v3.12 (2026-02) — Analytics avançada + typing adaptativo + 4 agentes openai
 
