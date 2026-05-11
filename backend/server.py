@@ -244,7 +244,7 @@ async def agent_analytics(agent_id: str, days: int = 30, claims=Depends(current_
     Returns empty-but-valid shapes when there's no data yet.
     """
     from datetime import timedelta, datetime, timezone
-    days = max(1, min(int(days or 30), 365))
+    days = max(1, min(int(days) if days is not None else 30, 365))
     tid = claims["tenant_id"]
     agent = await db.agents.find_one({"id": agent_id, "tenant_id": tid}, {"_id": 0})
     if not agent:

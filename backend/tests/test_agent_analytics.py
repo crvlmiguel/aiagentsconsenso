@@ -139,11 +139,11 @@ class TestAnalyticsValidation:
         assert len(body["daily_series"]) == 365
 
     def test_days_zero_falls_back_to_default(self, auth_headers):
-        # days=0 is falsy → server falls back to default 30 (by design: `days or 30`)
+        # days=0 → clamped to minimum 1 (tighter behaviour after fix)
         r = requests.get(f"{BASE_URL}/api/agents/{MARIA_AGENT_ID}/analytics?days=0",
                          headers=auth_headers, timeout=30)
         assert r.status_code == 200
-        assert r.json()["days"] == 30
+        assert r.json()["days"] == 1
 
 
 # ------------------ Error handling ------------------
