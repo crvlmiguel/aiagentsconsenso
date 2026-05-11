@@ -1,7 +1,7 @@
 import React, { useState, useEffect, createContext, useContext } from "react";
 import { NavLink, useNavigate, useLocation } from "react-router-dom";
 import {
-  Inbox, Bot, Users, LifeBuoy, BarChart3, UserPlus,
+  Inbox, Bot, Users, LifeBuoy, BarChart3, UserPlus, TrendingUp,
   Settings as SettingsIcon, Shield, LogOut, Database, Wand2, Menu, X,
 } from "lucide-react";
 import { useAuth } from "../lib/auth";
@@ -10,6 +10,7 @@ import { Logo } from "./Brand";
 const items = [
   { section: "core", to: "/app/caixa", label: "Caixa de entrada", icon: Inbox, tid: "nav-caixa" },
   { section: "core", to: "/app/painel", label: "Painel", icon: BarChart3, tid: "nav-painel" },
+  { section: "core", to: "/app/analytics", label: "Analytics", icon: TrendingUp, tid: "nav-analytics" },
 
   { section: "agents", heading: "Agentes" },
   { section: "agents", to: "/app/construtor", label: "Construtor", icon: Wand2, tid: "nav-construtor", badge: "NOVO" },

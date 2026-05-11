@@ -8,6 +8,7 @@ import Login from "./pages/Login";
 import Register from "./pages/Register";
 import AppLayout from "./pages/AppLayout";
 import Painel from "./pages/Painel";
+import Analytics from "./pages/Analytics";
 import Caixa from "./pages/Caixa";
 import Construtor from "./pages/Construtor";
 import Agentes from "./pages/Agentes";
@@ -44,6 +45,7 @@ function App() {
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<Navigate to="/app/painel" replace />} />
             <Route path="painel" element={<Painel />} />
+            <Route path="analytics" element={<Analytics />} />
             <Route path="caixa" element={<Caixa />} />
             <Route path="construtor" element={<Construtor />} />
             <Route path="agentes" element={<Agentes />} />

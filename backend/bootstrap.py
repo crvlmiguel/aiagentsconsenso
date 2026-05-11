@@ -97,8 +97,8 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
         "default_language": "pt",
         "icebreakers": agent_def.get("icebreakers", []),
         "welcome_message": agent_def.get("welcome_message", "Olá! Como posso ajudar?"),
-        "api_provider": "emergent", "api_key": "",
-        "model_provider": "auto", "model_name": "gemini-2.5-flash",
+        "api_provider": "openai", "api_key": "",
+        "model_provider": "openai", "model_name": "gpt-4o-mini",
         "data_source_ids": [source_id],
         "tools": [{"key": "create_lead", "enabled": True}],
         "channels": {
@@ -206,8 +206,8 @@ async def _ensure_abby(db, tenant_id: str):
         "tone": "profissional, comunicativo, extremamente amigável, conversacional como uma pessoa real",
         "goal": "Apresentar imóveis do catálogo ABBI, qualificar interesse e capturar leads para a equipa comercial.",
         "system_prompt": system_prompt, "rules": rules,
-        "api_provider": "emergent", "api_key": "",
-        "model_provider": "auto", "model_name": "gemini-2.5-flash",
+        "api_provider": "openai", "api_key": "",
+        "model_provider": "openai", "model_name": "gpt-4o-mini",
         "tools": [
             {"key": "create_lead", "enabled": True},
             {"key": "create_ticket", "enabled": True},

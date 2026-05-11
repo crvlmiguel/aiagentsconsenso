@@ -231,6 +231,153 @@ async def dashboard_stats(claims=Depends(current_user)):
     }
 
 
+# ======================== ANALYTICS (per-agent) ========================
+@api.get("/agents/{agent_id}/analytics")
+async def agent_analytics(agent_id: str, days: int = 30, claims=Depends(current_user)):
+    """Advanced per-agent analytics for the dashboard:
+      - conversations, messages, leads totals + daily breakdown
+      - conversion_rate (leads / conversations)
+      - qualification_breakdown (quente/morno/frio)
+      - top_icebreakers (which opening messages led to leads)
+      - funnel: visitors → engaged (3+ msgs) → qualified → lead_captured
+
+    Returns empty-but-valid shapes when there's no data yet.
+    """
+    from datetime import timedelta, datetime, timezone
+    days = max(1, min(int(days or 30), 365))
+    tid = claims["tenant_id"]
+    agent = await db.agents.find_one({"id": agent_id, "tenant_id": tid}, {"_id": 0})
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+
+    # ---- Totals
+    convo_q = {"tenant_id": tid, "agent_id": agent_id, "created_at": {"$gte": cutoff}}
+    convos_total = await db.conversations.count_documents(convo_q)
+
+    leads_q = {"tenant_id": tid, "agent_id": agent_id, "created_at": {"$gte": cutoff}}
+    leads_total = await db.leads.count_documents(leads_q)
+
+    # Messages — joined via conversation_id
+    convo_ids = [c["id"] async for c in db.conversations.find(convo_q, {"id": 1, "_id": 0})]
+    msg_q = {"conversation_id": {"$in": convo_ids}} if convo_ids else {"conversation_id": "__none__"}
+    messages_total = await db.messages.count_documents(msg_q)
+
+    conversion_rate = round((leads_total / convos_total) * 100, 1) if convos_total else 0.0
+
+    # ---- Daily breakdown (conversations + leads)
+    def _day(iso: str) -> str:
+        return (iso or "")[:10]
+    daily_convos = {}
+    async for c in db.conversations.find(convo_q, {"created_at": 1, "_id": 0}):
+        d = _day(c.get("created_at", ""))
+        if d: daily_convos[d] = daily_convos.get(d, 0) + 1
+    daily_leads = {}
+    async for l in db.leads.find(leads_q, {"created_at": 1, "_id": 0}):
+        d = _day(l.get("created_at", ""))
+        if d: daily_leads[d] = daily_leads.get(d, 0) + 1
+    # Fill missing days
+    today = datetime.now(timezone.utc).date()
+    daily_series = []
+    for i in range(days - 1, -1, -1):
+        d = (today - timedelta(days=i)).isoformat()
+        daily_series.append({
+            "day": d,
+            "conversations": daily_convos.get(d, 0),
+            "leads": daily_leads.get(d, 0),
+        })
+
+    # ---- Qualification breakdown (uses convo.qualification.status / .tags)
+    qual = {"quente": 0, "morno": 0, "frio": 0, "outros": 0}
+    async for c in db.conversations.find(convo_q, {"qualification": 1, "tags": 1, "_id": 0}):
+        q = (c.get("qualification") or {})
+        status = (q.get("status") or "").lower()
+        tags = [t.lower() for t in (c.get("tags") or [])]
+        score = "outros"
+        if "quente" in status or "quente" in tags or "hot" in tags or "high" in status:
+            score = "quente"
+        elif "morno" in status or "morno" in tags or "warm" in tags or "medium" in status:
+            score = "morno"
+        elif "frio" in status or "frio" in tags or "cold" in tags or "low" in status:
+            score = "frio"
+        qual[score] += 1
+
+    # ---- Top icebreakers — counts of first user message that led to a lead
+    icebreaker_to_leads = {}
+    icebreaker_total = {}
+    if convo_ids:
+        # For each conversation, get the first user message text
+        async for m in db.messages.aggregate([
+            {"$match": {"conversation_id": {"$in": convo_ids}, "sender": "user"}},
+            {"$sort": {"created_at": 1}},
+            {"$group": {"_id": "$conversation_id", "first_text": {"$first": "$text"}}},
+        ]):
+            text = (m.get("first_text") or "").strip()[:120]
+            if not text:
+                continue
+            icebreaker_total[text] = icebreaker_total.get(text, 0) + 1
+        # Tag which conversations had a lead
+        lead_convo_ids = set()
+        async for l in db.leads.find(leads_q, {"conversation_id": 1, "_id": 0}):
+            if l.get("conversation_id"):
+                lead_convo_ids.add(l["conversation_id"])
+        # Re-aggregate but only for lead-producing conversations
+        if lead_convo_ids:
+            async for m in db.messages.aggregate([
+                {"$match": {"conversation_id": {"$in": list(lead_convo_ids)}, "sender": "user"}},
+                {"$sort": {"created_at": 1}},
+                {"$group": {"_id": "$conversation_id", "first_text": {"$first": "$text"}}},
+            ]):
+                text = (m.get("first_text") or "").strip()[:120]
+                if not text:
+                    continue
+                icebreaker_to_leads[text] = icebreaker_to_leads.get(text, 0) + 1
+
+    top_icebreakers = sorted([
+        {"opener": k, "opens": v, "leads": icebreaker_to_leads.get(k, 0),
+         "rate": round((icebreaker_to_leads.get(k, 0) / v) * 100, 1) if v else 0.0}
+        for k, v in icebreaker_total.items()
+    ], key=lambda x: (-x["leads"], -x["opens"]))[:8]
+
+    # ---- Funnel
+    # visitors = unique external_user_id with at least 1 msg
+    visitors = await db.conversations.count_documents(convo_q)
+    # engaged = convo with >= 3 messages (user msgs >= 2)
+    engaged = 0
+    if convo_ids:
+        async for grp in db.messages.aggregate([
+            {"$match": {"conversation_id": {"$in": convo_ids}, "sender": "user"}},
+            {"$group": {"_id": "$conversation_id", "n": {"$sum": 1}}},
+            {"$match": {"n": {"$gte": 2}}},
+            {"$count": "engaged"},
+        ]):
+            engaged = grp.get("engaged", 0)
+    qualified = sum(qual[k] for k in ("quente", "morno"))  # quente + morno
+    funnel = [
+        {"stage": "Visitantes", "value": visitors},
+        {"stage": "Engajados (3+ msgs)", "value": engaged},
+        {"stage": "Qualificados", "value": qualified},
+        {"stage": "Leads capturados", "value": leads_total},
+    ]
+
+    return {
+        "agent_id": agent_id,
+        "agent_name": agent.get("name"),
+        "days": days,
+        "totals": {
+            "conversations": convos_total,
+            "messages": messages_total,
+            "leads": leads_total,
+            "conversion_rate": conversion_rate,
+        },
+        "daily_series": daily_series,
+        "qualification_breakdown": qual,
+        "top_icebreakers": top_icebreakers,
+        "funnel": funnel,
+    }
+
+
 # ======================== AGENTS ========================
 @api.get("/agents")
 async def list_agents(claims=Depends(current_user)):

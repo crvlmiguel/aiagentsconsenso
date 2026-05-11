@@ -259,6 +259,45 @@ async function send(text) {
 
     streamed = true;
     let row = null, bubble = null, accReply = "", finalCards = [], finalFollow = null;
+    // Adaptive typing — drains incoming chars at a human-like cadence.
+    // Slow for short replies (feels deliberate), fast for long ones (no patience-test).
+    let pendingChars = [];           // queue of chars not yet rendered
+    let renderedText = "";           // what's currently on screen
+    let streamDone = false;          // backend stream finished?
+    let typingTimer = null;
+
+    const startTypingTimer = () => {
+      if (typingTimer) return;
+      const tick = () => {
+        if (pendingChars.length === 0) {
+          if (streamDone) {
+            typingTimer = null;
+            return;
+          }
+          typingTimer = setTimeout(tick, 40);
+          return;
+        }
+        // Adaptive batch + delay
+        // - Very short expected total (<40): 1 char per tick @ 35ms
+        // - Medium (<160): 2 chars @ 18ms
+        // - Long (>=160): 4-6 chars @ 8ms (fast catch-up)
+        const expectedTotal = renderedText.length + pendingChars.length;
+        let batch = 1, delay = 35;
+        if (expectedTotal >= 160) { batch = 5; delay = 8; }
+        else if (expectedTotal >= 40) { batch = 2; delay = 18; }
+        // If we're falling far behind the buffer, accelerate
+        if (pendingChars.length > 80) { batch = Math.min(8, pendingChars.length); delay = 6; }
+        const chunk = pendingChars.splice(0, batch).join("");
+        renderedText += chunk;
+        if (bubble) {
+          bubble.textContent = renderedText;
+          msgs.scrollTop = msgs.scrollHeight;
+        }
+        typingTimer = setTimeout(tick, delay);
+      };
+      typingTimer = setTimeout(tick, 35);
+    };
+
     const reader = res.body.getReader();
     const decoder = new TextDecoder("utf-8");
     let buf = "";
@@ -267,7 +306,6 @@ async function send(text) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += decoder.decode(value, { stream: true });
-      // SSE messages are separated by \n\n
       let idx;
       while ((idx = buf.indexOf("\n\n")) >= 0) {
         const ev = buf.slice(0, idx).trim();
@@ -277,7 +315,6 @@ async function send(text) {
         try { evt = JSON.parse(ev.slice(5).trim()); } catch (_) { continue; }
         if (evt.type === "chunk") {
           if (!bubble) {
-            // First token arrived — hide typing, create empty bubble
             typing.remove();
             row = document.createElement("div");
             row.className = "row bot";
@@ -288,24 +325,35 @@ async function send(text) {
             msgs.appendChild(row);
           }
           accReply += evt.text;
-          bubble.textContent = accReply;
-          msgs.scrollTop = msgs.scrollHeight;
+          // Push chars into the typing queue (not directly into the DOM)
+          for (const ch of evt.text) pendingChars.push(ch);
+          startTypingTimer();
         } else if (evt.type === "done") {
           finalCards = evt.cards || [];
           finalFollow = evt.follow_up || null;
-          // Ensure bubble exists (in case no chunks were emitted)
           if (!bubble) {
+            // No chunks were emitted (happens on tiny replies) — just render
             typing.remove();
             botMsg(evt.reply || "…", [], []);
+            streamDone = true;
           } else {
-            // Replace bubble text with the final reply (in case JSON-escapes differed)
-            bubble.textContent = evt.reply || accReply;
+            // Ensure any divergence between streamed chars and final reply is reconciled
+            const finalReply = evt.reply || accReply;
+            // Push any remaining chars (in case JSON-final had escape divergence)
+            for (let i = renderedText.length + pendingChars.length; i < finalReply.length; i++) {
+              pendingChars.push(finalReply[i]);
+            }
+            streamDone = true;
+            startTypingTimer();
           }
         } else if (evt.type === "error") {
           throw new Error(evt.error || "stream error");
         }
       }
     }
+
+    // Wait until the typing queue drains before showing follow-up
+    while (pendingChars.length > 0) await new Promise(r => setTimeout(r, 50));
 
     // Render follow-up + cards (typing dots between for natural feel)
     if (finalFollow || finalCards.length > 0) {
