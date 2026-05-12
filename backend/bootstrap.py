@@ -149,7 +149,10 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
             {"id": existing["id"]},
             {"$set": content_patch},
         )
-        logger.info(f"[bootstrap] refreshed agent content '{name}' ({existing['id'][:8]}…)")
+        logger.info(
+            f"[bootstrap] refreshed agent '{name}' ({existing['id'][:8]}…) "
+            f"prompt_len={len(agent_def['system_prompt'])} ice={len(agent_def.get('icebreakers', []))} kb_chunks={len(kb)}"
+        )
     else:
         agent_id = str(uuid.uuid4())
         await db.agents.insert_one({
@@ -299,6 +302,7 @@ async def bootstrap(db):
 
         # Lazy imports of seed defs (kept in seed_*.py for separation of concerns)
         from seed_maria import (
+            AGENT_NAME as MARIA_NAME,
             SYSTEM_PROMPT as MARIA_PROMPT,
             ICEBREAKERS as MARIA_ICE,
             WELCOME_MESSAGE as MARIA_WELCOME,
@@ -325,9 +329,9 @@ async def bootstrap(db):
         )
 
         await _ensure_agent_with_kb(db, tenant_id, {
-            "name": "Maria — Consenso SDR AI",
-            "role": "SDR AI Consultiva B2B — Consenso (consenso-shop.eu)",
-            "goal": "Educar empresas sobre agentes IA multilingue, qualificar visitantes (nome, empresa, setor, dor, contacto) e converter em pedidos de demonstração personalizada.",
+            "name": MARIA_NAME,
+            "role": "Assistente IA principal da Consenso Plus — multissetorial (Imobiliário, Hotelaria, Turismo, Empresas de Serviços)",
+            "goal": "Orientar visitantes do website Consenso Plus, identificar a área certa (Imobiliário, Hotelaria, Turismo ou Empresas de Serviços), qualificar leads e agendar demonstrações via https://consenso-shop.eu/marcar-reuniao.",
             "system_prompt": MARIA_PROMPT,
             "icebreakers": MARIA_ICE, "welcome_message": MARIA_WELCOME,
             "avatar_url": MARIA_AVATAR, "theme": MARIA_THEME,

@@ -6,6 +6,20 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
 
+## v3.19.1 (2026-02) — Hotfix: bootstrap não estava a atualizar o nome da Maria
+
+### Bug
+Após o redeploy da v3.19, a Maria continuava em produção com o nome antigo "Maria — Consenso SDR AI" porque `bootstrap.py` tinha o nome **hardcoded** em vez de importar do `seed_maria.py`.
+
+### Fix
+- `bootstrap.py` agora importa `AGENT_NAME as MARIA_NAME` do `seed_maria.py` (single source of truth)
+- O role/goal do agente também foram atualizados para refletir o posicionamento multissetorial
+- Log enriquecido com `prompt_len` para confirmar visualmente que cada agente foi refrescado em cada startup
+
+### Validação
+- Local: agente Maria agora persiste com nome correto `"Maria — Assistente IA Consenso Plus"` após bootstrap
+- Logs: `[bootstrap] refreshed agent 'Maria — Assistente IA Consenso Plus' (4b4dbf03…) prompt_len=12474 ice=6 kb_chunks=26`
+
 ## v3.19 (2026-02) — Maria como Assistente IA global da plataforma Consenso Plus
 
 ### Reposicionamento estratégico
