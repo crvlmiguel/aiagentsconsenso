@@ -574,10 +574,9 @@ KNOWLEDGE_CHUNKS = [
 ]
 
 ICEBREAKERS = [
-    "🏠 Imobiliário",
-    "🛎️ Hotelaria",
-    "🌍 Turismo",
-    "💼 Empresas de Serviços",
+    "📈 Qual é o ROI esperado?",
+    "⏰ Como evitar perder pedidos fora de horas?",
+    "🤖 Como reduzir trabalho no atendimento?",
     "💰 Ver planos e preços",
     "🎬 Marcar uma demo",
 ]

@@ -6,6 +6,36 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
 
+## v3.19.2 (2026-02) — Icebreakers focados em ROI + StayLocal uniformizado
+
+### Maria — novos icebreakers ROI-driven
+3 novos icebreakers de alto valor comercial:
+- 📈 "Qual é o ROI esperado?"
+- ⏰ "Como evitar perder pedidos fora de horas?"
+- 🤖 "Como reduzir trabalho no atendimento?"
++ 💰 "Ver planos e preços" e 🎬 "Marcar uma demo"
+
+### StayLocal Concierge AI — tom uniformizado para "tu"
+**Bug**: StayLocal misturava "sinta-se / aproveite a sua / recebê-lo" (formal pt-BR).
+**Fix**: System prompt e welcome reescritos com "tu/teu/contigo". Bloco IDIOMA E TOM agora bane explicitamente "você/sua/seu/sinta-se/aproveite a sua/o senhor/pretende/poderia". Tom premium pela escolha de palavras, não pela formalidade arcaica. Adicionado bloco "5) HOSPEDADO" para responder a hóspedes presentes (WiFi, check-in, recomendações locais).
+
+### Testes E2E realizados
+**Maria** (5 cenários):
+- ✅ "Qual é o ROI esperado?" → resposta consultiva com números
+- ✅ "Como evitar perder pedidos fora de horas?" → fala de 24/7 + multicanal
+- ✅ "Como reduzir trabalho no atendimento?" → automação + qualificação
+- ✅ "Ver planos e preços" → bullets perfeitos
+- ✅ Reposicionamento multissetorial mantido
+
+**StayLocal** (4 cenários):
+- ✅ "Sou hóspede e cheguei agora" → "ajudar-te na tua estadia" (tom tu)
+- ✅ "Qual a password do WiFi?" → "confirmar isso para ti"
+- ✅ "reserva romântica em Lisboa" → "tua estadia romântica"
+- ✅ "Hello! romantic stay in Porto" → resposta inteira em EN
+- ✅ "Hola! hotel romántico" → resposta inteira em ES
+
+**Regressões**: 63/63 pytest passed
+
 ## v3.19.1 (2026-02) — Hotfix: bootstrap não estava a atualizar o nome da Maria
 
 ### Bug
