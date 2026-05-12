@@ -1,10 +1,51 @@
-# Consenso Plus — PRD (v3.16)
+# Consenso Plus — PRD (v3.17)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token** e **cards imobiliários premium**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.17 (2026-02) — Maria multissetorial + cores Consenso + demos públicas
+
+### 1. Maria expandida para todos os setores
+- **Mantém** todo o conhecimento e capacidades imobiliárias (portefólio, visitas, simulação crédito).
+- **Adiciona** detecção de contexto setorial: hotelaria, alojamento local, turismo, clínicas, restauração, e-commerce, serviços B2B, consultoria, atendimento corporativo.
+- Maria identifica o setor pela conversa e adapta os casos de uso (não assume mais imobiliário).
+- 9 novos chunks KB com casos de uso por setor + chunk dedicado ao link de agendamento.
+
+### 2. Cores Consenso aplicadas
+- Botão enviar do widget: **#E4AC1E (dourado)** com hover #C7951A e box-shadow dourado.
+- Launcher bubble (widget.js): **#E4AC1E (dourado)** com sombra dourada.
+- Variáveis CSS introduzidas: `--gold`, `--gold-dark`, `--gold-soft`.
+- Mantém azul `#0069FE/#4591CE` em headers, bubbles do utilizador e cards.
+
+### 3. Link de agendamento integrado
+- `https://consenso-shop.eu/marcar-reuniao` partilhado naturalmente pela Maria quando há interesse comercial real (demo, reunião, "como avançamos").
+- Header das páginas demo também tem CTA dourado "Marcar reunião".
+
+### 4. Anti-redundância de mensagens
+Nova função `_filter_redundant_followup()` em `ai/orchestrator.py`:
+- Corta follow_ups genéricos sem valor ("Queres saber mais?", "Posso ajudar com mais alguma coisa?").
+- Corta follow_ups que parafraseiam o reply (overlap >65%).
+- Corta segunda pergunta quando reply já termina em "?" e follow_up não acrescenta link/contacto.
+- Aplica-se ao endpoint clássico **E** ao streaming SSE.
+
+### 5. Páginas demo públicas (sem login)
+3 landing pages em `/app/frontend/src/pages/Demos.jsx`:
+- `/demo` ou `/demo/generalista` → Maria multissetorial (azul Consenso)
+- `/demo/hotelaria` → StayLocal Concierge AI (cor dourada)
+- `/demo/turismo` → Tejo Sunset Sailing AI Guide (azul-claro)
+
+Cada landing tem hero adaptado ao setor + 4 bullets de benefícios + sample queries + iframe do widget + footer com certificações ISO.
+
+### Validação
+- ✅ **114/114 pytest passed** (zero regressões)
+- ✅ Manual curl: Maria adapta a hotelaria, clínicas, e fala spontaneamente sobre Consenso quando vago (sem assumir imobiliário)
+- ✅ Maria partilha o link de agendamento naturalmente quando pedida reunião
+- ✅ Anti-redundância: 5/5 cenários testados (genérico, paráfrase, Q+Q, link, válido)
+- ✅ Frontend lint: zero issues
+- ✅ Screenshots: demos Hotelaria + Generalista renderizam corretamente com botão dourado
 
 ## v3.16 (2026-02) — Simulação de crédito conversacional + comparação lado-a-lado
 

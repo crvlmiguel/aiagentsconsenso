@@ -55,8 +55,8 @@
     var css = document.createElement("style");
     css.id = "cp-widget-style";
     css.textContent = '' +
-      '#cp-launcher{position:fixed!important;bottom:20px!important;right:20px!important;width:60px!important;height:60px!important;border-radius:50%!important;background:#0069FE!important;color:#fff!important;border:0!important;cursor:pointer!important;box-shadow:0 8px 24px rgba(0,105,254,.35)!important;z-index:2147483646!important;display:flex!important;align-items:center!important;justify-content:center!important;transition:transform .2s,box-shadow .2s!important;padding:0!important;margin:0!important;font-family:inherit!important}' +
-      '#cp-launcher:hover{transform:scale(1.06)!important;box-shadow:0 12px 32px rgba(0,105,254,.5)!important}' +
+      '#cp-launcher{position:fixed!important;bottom:20px!important;right:20px!important;width:60px!important;height:60px!important;border-radius:50%!important;background:#E4AC1E!important;color:#fff!important;border:0!important;cursor:pointer!important;box-shadow:0 8px 24px rgba(228,172,30,.45)!important;z-index:2147483646!important;display:flex!important;align-items:center!important;justify-content:center!important;transition:transform .2s,box-shadow .2s!important;padding:0!important;margin:0!important;font-family:inherit!important}' +
+      '#cp-launcher:hover{transform:scale(1.06)!important;box-shadow:0 12px 32px rgba(228,172,30,.6)!important;background:#C7951A!important}' +
       '#cp-launcher svg{width:26px;height:26px;display:block}' +
       '#cp-frame{position:fixed!important;bottom:92px!important;right:20px!important;width:420px!important;height:620px!important;max-width:calc(100vw - 40px)!important;max-height:calc(100vh - 120px)!important;border:0!important;border-radius:16px!important;box-shadow:0 20px 60px rgba(11,19,36,.22)!important;z-index:2147483645!important;background:#fff!important;transform:translateY(16px) scale(.98);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;display:none}' +
       '#cp-frame.cp-open{opacity:1;transform:translateY(0) scale(1);pointer-events:auto;display:block}' +

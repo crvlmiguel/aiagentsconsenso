@@ -12,11 +12,14 @@
 @supports(height:100dvh){.wrap{height:100dvh}}
 :root{
   --vv-h:100%;
-  --brand:#0069FE;          /* Primary CTA, user bubble, send button */
+  --brand:#0069FE;          /* Primary CTA, user bubble (azul main) */
   --brand-dark:#003F99;     /* Header gradient end */
   --brand-soft:#EAF2FF;     /* Avatar bg, focus ring */
   --brand-border:#C7DDFF;   /* Icebreakers border */
   --bot:#0069FE;            /* Bot accent (links, prices) — overridable per-agent */
+  --gold:#E4AC1E;           /* Consenso gold — send button, launcher */
+  --gold-dark:#C7951A;      /* Gold hover */
+  --gold-soft:#FEF7E0;      /* Gold soft tint */
 }
 @media(max-width:520px){
   .wrap{max-width:100%;border:0;border-radius:0}
@@ -139,9 +142,9 @@
 .cp-modal .err{color:#DC2626;font-size:11.5px;margin-top:8px;min-height:14px}
 .inp{display:flex;gap:8px;padding:12px;border-top:1px solid #E5EAF2;background:#fff}
 .inp input{flex:1;padding:11px 16px;border:1px solid #E5EAF2;border-radius:999px;font:inherit;outline:none;font-size:14px;transition:all .15s}
-.inp input:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
-.inp button{background:var(--brand);color:#fff;border:0;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s}
-.inp button:hover{background:#0057D5;transform:scale(1.05)}
+.inp input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+.inp button{background:var(--gold);color:#fff;border:0;width:40px;height:40px;border-radius:50%;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .15s;box-shadow:0 3px 10px rgba(228,172,30,.32)}
+.inp button:hover{background:var(--gold-dark);transform:scale(1.05);box-shadow:0 4px 14px rgba(228,172,30,.45)}
 .inp button:disabled{opacity:.5}
 .typing{margin-left:34px;display:inline-flex;gap:4px;padding:12px 16px;background:#fff;border:1px solid #E5EAF2;border-radius:20px;align-self:flex-start;animation:slideIn .2s ease-out both}
 .typing span{width:7px;height:7px;border-radius:50%;background:#C7D0DF;animation:t 1.2s infinite}

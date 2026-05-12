@@ -1,10 +1,73 @@
 """Agent Orchestrator — decides actions AND generates a structured response (reply + cards)."""
 import logging
 import re
+import unicodedata
 from typing import List, Dict, Any
 from .router import llm_complete, extract_json
 
 logger = logging.getLogger(__name__)
+
+
+def _normalize_for_dedup(text: str) -> str:
+    """Lowercase + strip accents + collapse spaces — for similarity checks."""
+    if not text:
+        return ""
+    s = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii")
+    s = re.sub(r"[^\w\s]", " ", s.lower())
+    return " ".join(s.split())
+
+
+# Genéricos sem valor que devem ser sempre cortados do follow_up
+_BAD_GENERIC_FOLLOWUPS = {
+    "queres saber mais", "posso ajudar com mais alguma coisa",
+    "posso ajudar em algo mais", "queres mais informacoes",
+    "queres mais informacao", "queres saber mais sobre",
+    "tens alguma duvida", "queres continuar",
+    "o que achas", "queres saber mais detalhes",
+    "alguma duvida", "posso ajudar", "queres saber",
+}
+
+
+def _filter_redundant_followup(reply_text: str, follow_up: str) -> str:
+    """Anti-redundância: descarta follow_ups que:
+       - usam frases genéricas sem valor ("queres saber mais?")
+       - parafraseiam o reply (overlap > 65%)
+       - duplicam pergunta quando reply já termina com ?
+    Returns: follow_up filtrado (possivelmente None/"")."""
+    if not follow_up or not isinstance(follow_up, str):
+        return None
+    follow_up = follow_up.strip()
+    if not follow_up:
+        return None
+    if not reply_text:
+        return follow_up
+
+    fu_norm = _normalize_for_dedup(follow_up)
+    rp_norm = _normalize_for_dedup(reply_text)
+
+    # 1. Generic without value → cut
+    if any(g in fu_norm for g in _BAD_GENERIC_FOLLOWUPS):
+        return None
+
+    # 2. Paraphrase of reply (overlap > 65%) → cut
+    if fu_norm and rp_norm:
+        words_fu = set(fu_norm.split())
+        words_rp = set(rp_norm.split())
+        if len(words_fu) >= 3 and len(words_fu & words_rp) / len(words_fu) > 0.65:
+            return None
+
+    # 3. Reply ends with question + follow_up is also a question without
+    # added value (link, contact info) → cut
+    if reply_text.rstrip().endswith("?") and follow_up.rstrip().endswith("?"):
+        fu_low = follow_up.lower()
+        adds_value = any(k in fu_low for k in (
+            "http", "https", ".eu", ".com", "consenso-shop", "marcar-reuniao",
+            "agendar", "marcar", "@",
+        ))
+        if not adds_value:
+            return None
+
+    return follow_up
 
 
 def _retrieved_to_cards(retrieved: List[dict], limit: int = 3) -> List[dict]:
@@ -244,6 +307,7 @@ JSON: {{"reply": "Boa! Tenho esta opção em Lagos que encaixa.", "follow_up": "
         follow_up = None
     if follow_up:
         follow_up = follow_up.strip() or None
+    follow_up = _filter_redundant_followup(reply_text, follow_up)
 
     # Resolve cards: prefer use_items index list (new schema) → server-prebuilt cards
     safe_cards = []
@@ -460,6 +524,7 @@ NÃO RESPONDAS EM PORTUGUÊS SE A ÚLTIMA MENSAGEM ESTÁ NOUTRO IDIOMA.
         follow_up = None
     if follow_up:
         follow_up = follow_up.strip() or None
+    follow_up = _filter_redundant_followup(reply_text, follow_up)
 
     safe_cards = []
     if isinstance(use_items, list):

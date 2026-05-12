@@ -18,6 +18,7 @@ import Tickets from "./pages/Tickets";
 import Equipa from "./pages/Equipa";
 import Admin from "./pages/Admin";
 import Definicoes from "./pages/Definicoes";
+import { DemoGeneralista, DemoHotelaria, DemoTurismo } from "./pages/Demos";
 
 function App() {
   return (
@@ -42,6 +43,11 @@ function App() {
           <Route path="/login" element={<Navigate to="/iniciar-sessao" replace />} />
           <Route path="/registar" element={<Register />} />
           <Route path="/register" element={<Navigate to="/registar" replace />} />
+          {/* Public demo landing pages — no auth required */}
+          <Route path="/demo" element={<DemoGeneralista />} />
+          <Route path="/demo/generalista" element={<DemoGeneralista />} />
+          <Route path="/demo/hotelaria" element={<DemoHotelaria />} />
+          <Route path="/demo/turismo" element={<DemoTurismo />} />
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<Navigate to="/app/painel" replace />} />
             <Route path="painel" element={<Painel />} />
