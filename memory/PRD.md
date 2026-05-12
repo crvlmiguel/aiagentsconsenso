@@ -6,6 +6,36 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
 
+## v3.19.3 (2026-02) — Pre-deploy hardening de TODOS os 4 agentes
+
+### Mudanças
+**`_ensure_abby` tornou-se idempotente** (era a única função que só criava, nunca atualizava):
+- Agora faz upsert do `name`, `welcome_message` e `icebreakers` em cada deploy
+- Corrigido nome em DB: "Abby — ABB Imóveis" (typo antigo) → "Abby — ABBI Imóveis"
+- Welcome message adicionado: "Olá! 👋 Sou a Abby da ABBI Imóveis..."
+- Icebreakers: 🏠 Comprar/simular · 🔑 Arrendar · 📈 Investimento · 📑 Documentos
+
+**Single source of truth para nomes dos agentes**:
+- Bootstrap agora importa `AGENT_NAME as SL_NAME` (StayLocal) e `AGENT_NAME as TJ_NAME` (Tejo Sailing) em vez de strings hardcoded
+- Garante que mudar o nome em qualquer `seed_*.py` propaga automaticamente em produção no próximo bootstrap
+
+### Estado em DB após bootstrap (tenant Consenso):
+```
+Abby — ABBI Imóveis                        | ice=4 | welcome=Olá! 👋 Sou a Abby da ABBI Imóveis...
+Maria — Assistente IA Consenso Plus        | ice=5 | welcome=Olá! 👋 Sou a Maria, a assistente IA da Consenso Plus...
+StayLocal Concierge AI                     | ice=3 | welcome=Bem-vindo ao StayLocal · Welcome 🌿 Sou o teu concierge...
+Tejo Sunset Sailing AI Guide               | ice=6 | welcome=Olá ⛵️ Sou o Tejo Sailing AI...
+```
+
+### Validação final
+- ✅ **Deployment Agent: PASS** — zero blockers, todos os checks passam
+- ✅ **63/63 pytest passed** — zero regressões
+- ✅ Backend imports OK, syntax limpo em todos os ficheiros Python
+- ✅ Schedulers em background a correr (follow-up + property feed)
+- ✅ Logs claros: `[bootstrap] refreshed agent 'NAME' prompt_len=N ice=N kb_chunks=N`
+- ✅ Single source of truth: AGENT_NAME constants em seed_maria.py, seed_staylocal.py, seed_tejo_sailing.py
+- ✅ Idempotência total: 4/4 agentes refrescados em cada startup sem duplicar nada
+
 ## v3.19.2 (2026-02) — Icebreakers focados em ROI + StayLocal uniformizado
 
 ### Maria — novos icebreakers ROI-driven
