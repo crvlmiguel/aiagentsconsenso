@@ -1,0 +1,171 @@
+"""Memória contextual da conversa — extrai factos já partilhados pelo
+utilizador para que a IA nunca repita perguntas.
+
+Determinístico (sem LLM). Corre a cada turno e produz um resumo
+'JÁ SABEMOS:' que é injetado no system prompt.
+"""
+import re
+from typing import List, Dict, Optional
+
+
+_NUM_WORDS_PT = {
+    "um": 1, "uma": 1, "uno": 1, "1": 1, "eu": 1, "só eu": 1, "apenas eu": 1, "sozinho": 1, "sozinha": 1,
+    "dois": 2, "duas": 2, "2": 2,
+    "três": 3, "tres": 3, "3": 3,
+    "quatro": 4, "4": 4,
+    "cinco": 5, "5": 5,
+    "seis": 6, "6": 6,
+    "sete": 7, "7": 7,
+    "oito": 8, "8": 8,
+    "nove": 9, "9": 9,
+    "dez": 10, "10": 10,
+    "vinte": 20, "20": 20,
+    "cinquenta": 50, "50": 50,
+    "cem": 100, "100": 100,
+}
+
+_EMAIL_RE = re.compile(r"\b[\w.+-]+@[\w-]+\.[\w.-]+\b")
+_PHONE_RE = re.compile(r"\+?\d[\d\s.\-]{7,}\d")
+_NAME_INTRO_RE = re.compile(
+    r"(?:chamo[\- ]?me|sou\s+o|sou\s+a|me\s+chamo|o\s+meu\s+nome\s+[ée]|nome\s*[:\-]?\s*)\s*"
+    r"([A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÀ-ÿ]+(?:\s+[A-ZÁÉÍÓÚÂÊÔÃÕÇ][\wÀ-ÿ]+){0,3})",
+    re.IGNORECASE,
+)
+
+_SECTOR_HINTS = [
+    ("imobiliário",   ["imobiliária", "imovel", "imóvel", "imoveis", "imóveis", "casa para vender", "portefolio imobiliario", "agente imobiliario"]),
+    ("hotelaria",     ["hotel", "pousada", "hostel", "resort"]),
+    ("alojamento local", ["airbnb", "booking.com", "alojamento local", " al ", "anfitri"]),
+    ("turismo",       ["turism", "tours", "experien"]),
+    ("clínica",       ["clínica", "clinica", "dentista", "consult", "médico", "medico"]),
+    ("restauração",   ["restaurante", "menu", "mesa"]),
+    ("e-commerce",    ["e-commerce", "ecommerce", "loja online", "shopify", "encomenda"]),
+    ("serviços B2B",  ["consultoria", "servi", "agência", "agencia"]),
+]
+
+
+def _extract_users_count(text: str) -> Optional[int]:
+    """Detecta 'quantos utilizadores' — '1', 'um', 'só eu', 'apenas eu', 'sou apenas eu', 'eu' isolado."""
+    t = text.lower().strip()
+
+    # Padrões directos de '1 utilizador': "sou eu", "apenas eu", "só eu", "eu", "sozinho", "sozinha"
+    if re.search(r"\b(?:s[óo]\s+)?(?:apenas\s+|s[óo]\s+|sou\s+)?eu\b(?!\s+(?:tenho|sou\s+\w{4,}))", t):
+        return 1
+    if re.search(r"\b(?:sozinh[oa]|so\s+um|apenas\s+(?:um|uma|eu))\b", t):
+        return 1
+
+    # 'N utilizador(es)', 'N pessoa(s)', 'N agente(s)', 'N na equipa'
+    m = re.search(r"\b(\d{1,3})\s*(?:utilizador|usuario|pessoa|agente|colaborador|na\s+equipa|user)", t)
+    if m:
+        return int(m.group(1))
+
+    # Palavra numérica + utilizador
+    m = re.search(r"\b(um|uma|dois|duas|tr[êe]s|quatro|cinco|seis|sete|oito|nove|dez)\s+(?:utilizador|usuario|pessoa|agente|colaborador|user|na\s+equipa)", t)
+    if m:
+        return _NUM_WORDS_PT.get(m.group(1).lower())
+
+    # Resposta isolada a pergunta de utilizadores (texto curto, só número/palavra)
+    if len(t) <= 25:
+        # "um", "1", "2 pessoas", "três"
+        words = re.findall(r"\w+", t)
+        if len(words) <= 4:
+            for w in words:
+                if w in _NUM_WORDS_PT:
+                    return _NUM_WORDS_PT[w]
+            m = re.match(r"^(\d{1,3})$", t)
+            if m:
+                return int(m.group(1))
+
+    return None
+
+
+def _extract_sector(text: str) -> Optional[str]:
+    t = text.lower()
+    for label, hints in _SECTOR_HINTS:
+        if any(h in t for h in hints):
+            return label
+    return None
+
+
+def _extract_name(text: str) -> Optional[str]:
+    m = _NAME_INTRO_RE.search(text)
+    if m:
+        return m.group(1).strip()
+    return None
+
+
+def collect_facts(history: List[Dict], current_text: str = "") -> Dict[str, str]:
+    """Percorre o histórico user→ai e extrai factos persistentes.
+    Returns dict com chaves: users, sector, name, email, phone (todas opcionais)."""
+    facts: Dict[str, str] = {}
+    user_texts: List[str] = []
+    for m in history or []:
+        if m.get("sender") == "user" and m.get("text"):
+            user_texts.append(m["text"])
+    if current_text:
+        user_texts.append(current_text)
+
+    # Pergunta de utilizadores foi colocada pela AI?
+    asked_users = False
+    for m in history or []:
+        if m.get("sender") == "ai":
+            t = (m.get("text") or "").lower()
+            if any(k in t for k in ("quantos utilizadores", "tamanho da", "tamanho da tua", "tamanho da sua", "elementos na equipa", "tamanho da equipa")):
+                asked_users = True
+                break
+
+    for t in user_texts:
+        if not t:
+            continue
+        # Users count — só consideramos válido se a pergunta foi feita ou
+        # se a frase tem palavra-chave 'utilizador/pessoa/equipa'
+        if "users" not in facts:
+            n = _extract_users_count(t)
+            if n is not None:
+                # Se for resposta ultra-curta ("eu", "um", "1"), só aceitar se a AI perguntou antes
+                ultra_short = len(t.strip().split()) <= 3
+                has_keyword = any(k in t.lower() for k in (
+                    "utilizador", "pessoa", "equipa", "colaborador", "agente", "user"))
+                if has_keyword or (ultra_short and asked_users):
+                    facts["users"] = str(n)
+
+        # Sector
+        if "sector" not in facts:
+            s = _extract_sector(t)
+            if s:
+                facts["sector"] = s
+
+        # Name
+        if "name" not in facts:
+            n = _extract_name(t)
+            if n:
+                facts["name"] = n
+
+        # Email
+        if "email" not in facts:
+            m = _EMAIL_RE.search(t)
+            if m:
+                facts["email"] = m.group(0)
+
+        # Phone
+        if "phone" not in facts:
+            m = _PHONE_RE.search(t)
+            if m:
+                facts["phone"] = m.group(0)
+
+    return facts
+
+
+def format_facts_pt(facts: Dict[str, str]) -> str:
+    """Constrói bloco 'JÁ SABEMOS:' para injectar no prompt."""
+    if not facts:
+        return ""
+    lines = []
+    if "name" in facts:    lines.append(f"- Nome: {facts['name']}")
+    if "sector" in facts:  lines.append(f"- Setor: {facts['sector']}")
+    if "users" in facts:   lines.append(f"- Nº de utilizadores: {facts['users']}")
+    if "email" in facts:   lines.append(f"- Email: {facts['email']}")
+    if "phone" in facts:   lines.append(f"- Telefone: {facts['phone']}")
+    if not lines:
+        return ""
+    return "JÁ SABEMOS DO UTILIZADOR (não voltar a perguntar):\n" + "\n".join(lines)

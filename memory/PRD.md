@@ -1,10 +1,33 @@
-# Consenso Plus — PRD (v3.17)
+# Consenso Plus — PRD (v3.18)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token** e **cards imobiliários premium**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.18 (2026-02) — Memória contextual + tom uniformizado + renderização de planos
+
+### Bugs corrigidos
+1. **Memória zero** — Maria repetia a mesma pergunta "Com quantos utilizadores pretendes iniciar?" mesmo depois do utilizador responder "EU", "1", "só eu". Resolvido com novo módulo `/app/backend/ai/memory.py` que extrai factos persistentes (nº utilizadores, setor, nome, email, telefone) do histórico e os injeta no system prompt como bloco "JÁ SABEMOS DO UTILIZADOR". O LLM é instruído explicitamente a NUNCA voltar a perguntar info já recolhida.
+2. **Tom misturado** — banido "você/sua/pretende/poderia/o senhor". Reforçado uso obrigatório de "tu/teu/contigo" no system prompt (4 reforços em locais críticos).
+3. **Planos com `\•` literal** — system prompt agora obriga uso de quebras de linha reais com bullets reais. Widget renderiza markdown leve (`formatBotText`) que limpa o glitch `\•` automaticamente, converte `\n` em `<br>`, faz auto-link de URLs e suporta `**bold**`.
+4. **Imóveis sem contexto** — regra explícita: "SÓ apresenta cards se houver intenção imobiliária explícita. NUNCA em conversas sobre planos, demos, hotelaria, clínicas."
+5. **Mensagens duplas redundantes** — system prompt reforça `follow_up: ""` sempre que possível. Anti-redundância em `_filter_redundant_followup()` já em vigor desde v3.17.
+6. **Agendamento direto** — Maria partilha `https://consenso-shop.eu/marcar-reuniao` imediatamente quando há interesse comercial, sem pedir email/nome antes ("o link trata disso").
+
+### Implementação
+- **Novo**: `/app/backend/ai/memory.py` (160 linhas, sem LLM) — `collect_facts()` + `format_facts_pt()`
+- **Atualizado**: `ai/orchestrator.py` — injeta `facts_block` no prompt do endpoint clássico **E** do streaming SSE
+- **Atualizado**: `widget.html` — função `formatBotText()` renderiza bullets, quebras de linha, links e remove o `\•` glitch
+- **Atualizado**: system prompts (classic + stream) com 8 instruções críticas concisas
+
+### Validação
+- ✅ **63/63 pytest passed** (phase1 + webchat_stream + widget + meta_channels + health_dashboard)
+- ✅ **Memória 4/4 cenários OK**: "só eu" → 1, "EU" → 1, "1" → 1, nome+email+setor numa frase → todos extraídos
+- ✅ **E2E**: Maria não repete pergunta dos utilizadores após "EU/só eu", partilha link de agendamento spontaneamente, planos renderizam com bullets perfeitos
+- ✅ **Tom**: "agendares/teu/contigo" em todos os outputs testados, zero "você/pretende"
+- ✅ Botão dourado + launcher dourado funcionais
 
 ## v3.17 (2026-02) — Maria multissetorial + cores Consenso + demos públicas
 

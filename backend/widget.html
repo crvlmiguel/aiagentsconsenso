@@ -204,6 +204,32 @@ function miniAvatar() {
   return mini;
 }
 
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({
+    "&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"
+  }[c]));
+}
+
+function formatBotText(raw) {
+  // Light markdown rendering for bot bubbles:
+  // 1) escape HTML, 2) auto-link URLs, 3) keep • bullets, 4) normalize \n
+  // Removes literal "\•" (backslash bullet) glitch sometimes emitted by LLMs.
+  if (!raw) return "";
+  let t = String(raw);
+  // Strip "\•" glitch (literal backslash before bullet)
+  t = t.replace(/\\•/g, "\n•").replace(/\\\s*•/g, "\n•");
+  // Strip leading \n at bullets
+  t = t.replace(/\\n/g, "\n");
+  t = escapeHtml(t);
+  // Auto-link URLs (after escape so we re-construct anchors)
+  t = t.replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:var(--brand);text-decoration:underline">$1</a>');
+  // Bold via **x**
+  t = t.replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>");
+  // Newlines → <br>
+  t = t.replace(/\n/g, "<br>");
+  return t;
+}
+
 function botMsg(text, icebreakers, cards, opts) {
   opts = opts || {};
   const row = document.createElement("div");
@@ -211,7 +237,7 @@ function botMsg(text, icebreakers, cards, opts) {
   row.appendChild(miniAvatar());
   const m = document.createElement("div");
   m.className = "msg";
-  m.textContent = text;
+  m.innerHTML = formatBotText(text);
   row.appendChild(m);
   msgs.appendChild(row);
 
@@ -506,7 +532,13 @@ async function send(text) {
         const ch = pendingChars.shift();
         renderedText += ch;
         if (bubble) {
-          bubble.textContent = renderedText;
+          // Renderiza com markdown leve só quando há quebras ou bullets para evitar
+          // overhead em cada tick. Caso contrário usa textContent para o efeito de typing.
+          if (renderedText.indexOf("\n") >= 0 || renderedText.indexOf("•") >= 0 || renderedText.indexOf("http") >= 0 || renderedText.indexOf("\\•") >= 0) {
+            bubble.innerHTML = formatBotText(renderedText);
+          } else {
+            bubble.textContent = renderedText;
+          }
           msgs.scrollTop = msgs.scrollHeight;
         }
         typingTimer = setTimeout(tick, delay);

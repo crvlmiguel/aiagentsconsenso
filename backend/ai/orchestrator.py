@@ -4,6 +4,7 @@ import re
 import unicodedata
 from typing import List, Dict, Any
 from .router import llm_complete, extract_json
+from .memory import collect_facts, format_facts_pt
 
 logger = logging.getLogger(__name__)
 
@@ -189,6 +190,17 @@ async def generate_response(
             lines.append(f"[{i}] {c['title']} | {c.get('price','')} | {c.get('description','')[:100]}")
         items_summary = "\n".join(lines)
 
+    # ===== Memória contextual =====
+    # Extrai factos já partilhados pelo utilizador (utilizadores, setor, nome,
+    # email, telefone) para que a Maria NUNCA repita perguntas.
+    last_user_text = ""
+    for m in reversed(history or []):
+        if m.get("sender") == "user" and m.get("text"):
+            last_user_text = m["text"]
+            break
+    facts = collect_facts(history or [], last_user_text)
+    facts_block = format_facts_pt(facts)
+
     system = f"""{base_prompt}
 
 Tom: {tone}.
@@ -198,28 +210,31 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 {f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
 
+{facts_block}
+
 INSTRUÇÕES (CRÍTICO):
-- 🌍 IDIOMA OBRIGATÓRIO: o cliente está a falar em "{reply_lang}".
-  • Se "{reply_lang}" = "pt" → responde em Português Europeu (NUNCA pt-BR).
-  • Se "{reply_lang}" = "en" → responde APENAS em English.
-  • Se "{reply_lang}" = "fr" → responde APENAS em Français.
-  • Se "{reply_lang}" = "de" → responde APENAS em Deutsch.
-  • Se "{reply_lang}" = "es" → responde APENAS en Español.
-  • Se "{reply_lang}" = "nl" → responde APENAS in Nederlands.
-  ⚠️ NUNCA mistures idiomas. NUNCA respondas em PT se o cliente escreveu noutro idioma.
-- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", o sistema mostrou ao cliente um cartão visual com os números.
-  Os parâmetros usados (entrada/prazo/idade) estão indicados no chunk. Comenta brevemente o resultado em 1 frase
-  ("Já tens a simulação 👆 — X €/mês com Y% entrada a Z anos") e pergunta o próximo dado em falta ou propõe próximo passo (visita / refinar prazo / etc.).
-  ⚠️ Se "Euribor" ou "spread" são técnicos, não os expliques — o sistema usa valores atuais automaticamente. Mas PODES e DEVES pedir entrada, prazo, idade para refinar.
-- FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
-- MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão. Sem parágrafos.
-- "use_items" é uma lista com os números [1..N] dos imóveis que queres mostrar como cards. Lista vazia [] se nenhum encaixa.
-- NÃO copies título/preço/link no reply — eles aparecem nos cards automaticamente.
-- "reply" e "follow_up" devem ser conversacionais, NUNCA listas de imóveis.
+- 🧠 MEMÓRIA: Se houver bloco "JÁ SABEMOS DO UTILIZADOR" acima, NUNCA voltes a perguntar essas informações. Usa-as diretamente na resposta. Avança naturalmente para o próximo passo (proposta de plano, demo, link).
+- 🇵🇹 TOM (CRÍTICO): SEMPRE Português Europeu informal "tu" (tu, teu, contigo, posso ajudar-te, queres). NUNCA "você/sua/seu/pretende/poderia/o senhor/vocês". Modern, próximo mas profissional. Banido pt-BR.
+- 🚫 ANTI-REPETIÇÃO: Verifica o histórico antes de fazer uma pergunta. Se o utilizador já respondeu, NÃO repitas a pergunta nem a reformules. NUNCA peças "desculpa pela confusão" repetidamente — apenas avança.
+- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", o sistema mostrou ao cliente um cartão visual. Comenta brevemente (1 frase) e pergunta o próximo dado em falta ou propõe visita.
+- FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "msg opcional só se acrescentar VALOR NOVO", "use_items": [1,2]}}
+- "follow_up" deve ser **VAZIO ("")** sempre que possível. Só usar se for um link de agendamento ou um dado concreto novo. NUNCA parafrasear o reply nem dizer "Estou aqui para ajudar".
+- MENSAGENS COMPACTAS mas COMPLETAS — prefere 1 mensagem rica em vez de 2 fragmentadas. Max 400 chars.
+- "use_items" lista [1..N] de imóveis a mostrar. Lista vazia [] se nenhum encaixa OU se o cliente NÃO demonstrou intenção imobiliária clara.
+- NÃO copies título/preço/link dos imóveis no reply — aparecem como cards automaticamente.
+- 🏠 IMÓVEIS: SÓ os mostres se o utilizador demonstrou interesse explícito (procurar, comprar, arrendar, ver portefólio). NUNCA mostres imóveis em conversas sobre planos, demos, hotelaria, clínicas, restauração ou outros setores.
+- 📅 AGENDAMENTO: quando o utilizador mostrar interesse comercial (demo, reunião, proposta, "quero saber mais", "quero ver", "como avançamos"), partilha IMEDIATAMENTE o link: https://consenso-shop.eu/marcar-reuniao. Nunca peças nome/email para "confirmar reunião" — o link trata disso.
+
+📋 APRESENTAR PLANOS — usar quebras de linha REAIS (\\n) entre cada plano. NUNCA usar "\\•" literal.
+Formato correto:
+"Temos 3 planos:
+• STARTER €49,90/mês — 2 utilizadores, 2.000 msg, Webchat + WhatsApp
+• PRO €74,90/mês ⭐ Mais Popular — 5 utilizadores, ilimitadas, 5 canais, CRM e Lead Scoring
+• ENTERPRISE sob consulta — ilimitado, follow-up auto, SLA, gestor dedicado
+Todos sem fidelização. Qual o tamanho da tua equipa?"
 
 ⚠️ ATENÇÃO MÁXIMA — IDIOMA DA RESPOSTA:
-Antes de escrever a resposta, identifica o idioma da ÚLTIMA mensagem do utilizador
-(que está marcada como "USER:" no histórico). Responde EXCLUSIVAMENTE nesse idioma.
+O cliente fala em "{reply_lang}". Responde EXCLUSIVAMENTE nesse idioma.
 - "Hello" / "How much" → English
 - "Bonjour" / "Combien" → Français
 - "Guten Tag" / "Wie viel" → Deutsch
@@ -227,12 +242,7 @@ Antes de escrever a resposta, identifica o idioma da ÚLTIMA mensagem do utiliza
 - "Hallo" / "Hoeveel" → Nederlands
 - "Olá" / "Quanto" → Português Europeu (NUNCA pt-BR)
 
-NÃO RESPONDAS EM PORTUGUÊS SE A ÚLTIMA MENSAGEM ESTÁ NOUTRO IDIOMA.
-
-EXEMPLO:
-Cliente: "Quero T2 em Lagos"
-Imóveis: [1] T2 Jardim de Lagos | Sob consulta...
-JSON: {{"reply": "Boa! Tenho esta opção em Lagos que encaixa.", "follow_up": "Qual o teu orçamento?", "use_items": [1]}}
+NÃO RESPONDAS EM PT SE A ÚLTIMA MENSAGEM É NOUTRO IDIOMA.
 """
 
     turns = []
@@ -441,6 +451,15 @@ async def generate_response_stream(
             lines.append(f"[{i}] {c['title']} | {c.get('price','')} | {c.get('description','')[:100]}")
         items_summary = "\n".join(lines)
 
+    # Memória contextual (idem ao endpoint clássico)
+    last_user_text = ""
+    for m in reversed(history or []):
+        if m.get("sender") == "user" and m.get("text"):
+            last_user_text = m["text"]
+            break
+    facts = collect_facts(history or [], last_user_text)
+    facts_block = format_facts_pt(facts)
+
     system = f"""{base_prompt}
 
 Tom: {tone}.
@@ -450,36 +469,27 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 {f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
 
+{facts_block}
+
 INSTRUÇÕES (CRÍTICO):
-- 🌍 IDIOMA OBRIGATÓRIO: o cliente está a falar em "{reply_lang}".
-  • Se "{reply_lang}" = "pt" → responde em Português Europeu (NUNCA pt-BR).
-  • Se "{reply_lang}" = "en" → responde APENAS em English.
-  • Se "{reply_lang}" = "fr" → responde APENAS em Français.
-  • Se "{reply_lang}" = "de" → responde APENAS em Deutsch.
-  • Se "{reply_lang}" = "es" → responde APENAS en Español.
-  • Se "{reply_lang}" = "nl" → responde APENAS in Nederlands.
-  ⚠️ NUNCA mistures idiomas. NUNCA respondas em PT se o cliente escreveu noutro idioma.
-- 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", JÁ FIZEMOS A SIMULAÇÃO automaticamente:
-  ⚠️ O sistema usou Euribor atual (2,45%) + spread médio (1,20%) + 20% entrada + 30 anos POR DEFEITO.
-  ⚠️ NUNCA peças Euribor, spread, prazo ou taxa ao cliente — o sistema já trata disso.
-  Comenta em 1 frase ("Já tens a simulação 👆 — X €/mês com as condições atuais") e propõe próximo passo (visita / ver outras opções).
-- FORMATO: APENAS JSON: {{"reply": "msg1 curta", "follow_up": "msg2 curta opcional", "use_items": [1,2]}}
-- EMITE O CAMPO "reply" PRIMEIRO (antes de follow_up e use_items) — isto é OBRIGATÓRIO.
-- MENSAGENS CURTAS (estilo WhatsApp): 1-2 frases, max 280 chars cada balão.
-- "use_items" é uma lista [1..N] dos imóveis para mostrar como cards. Lista vazia [] se nenhum encaixa.
-- NÃO copies título/preço/link no reply — eles aparecem nos cards automaticamente.
+- 🧠 MEMÓRIA: Se houver bloco "JÁ SABEMOS DO UTILIZADOR" acima, NUNCA voltes a perguntar essas informações. Usa-as e avança.
+- 🇵🇹 TOM: SEMPRE Português Europeu informal "tu" (tu, teu, contigo). NUNCA "você/sua/seu/pretende/poderia". Banido pt-BR.
+- 🚫 ANTI-REPETIÇÃO: Se o utilizador já respondeu, NÃO repitas a pergunta. NUNCA digas "desculpa pela confusão" — apenas avança.
+- 🌍 IDIOMA: o cliente fala em "{reply_lang}". Responde EXCLUSIVAMENTE nesse idioma. NUNCA pt-BR.
+- 🧮 SIMULAÇÃO CRÉDITO: se o contexto mencionar "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", o cartão já está visível. Comenta em 1 frase. Podes pedir entrada/prazo/idade mas NUNCA Euribor/spread.
+- 🏠 IMÓVEIS: só apresenta cards se houver intenção imobiliária explícita. NUNCA em conversas sobre planos, demos, hotelaria, clínicas.
+- 📅 AGENDAMENTO: se houver interesse comercial (demo, reunião, "saber mais"), partilha o link: https://consenso-shop.eu/marcar-reuniao
+- FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "só se acrescentar valor novo", "use_items": [1,2]}}
+- EMITE "reply" PRIMEIRO. follow_up VAZIO ("") sempre que possível. Max 400 chars.
+- Lista vazia [] em use_items se nenhum imóvel encaixar.
+- NÃO copies título/preço/link no reply.
 
-⚠️ ATENÇÃO MÁXIMA — IDIOMA DA RESPOSTA:
-Antes de escrever a resposta, identifica o idioma da ÚLTIMA mensagem do utilizador
-(que está marcada como "USER:" no histórico). Responde EXCLUSIVAMENTE nesse idioma.
-- "Hello" / "How much" → English
-- "Bonjour" / "Combien" → Français
-- "Guten Tag" / "Wie viel" → Deutsch
-- "Hola" / "Cuánto" → Español
-- "Hallo" / "Hoeveel" → Nederlands
-- "Olá" / "Quanto" → Português Europeu (NUNCA pt-BR)
-
-NÃO RESPONDAS EM PORTUGUÊS SE A ÚLTIMA MENSAGEM ESTÁ NOUTRO IDIOMA.
+📋 PLANOS — usa quebras de linha REAIS (cada bullet em nova linha, NUNCA "\\•" literal):
+"Temos 3 planos:
+• STARTER €49,90/mês — 2 utilizadores, 2.000 msg, Webchat + WhatsApp
+• PRO €74,90/mês ⭐ Mais Popular — 5 utilizadores, ilimitadas, 5 canais, CRM e Lead Scoring
+• ENTERPRISE sob consulta — ilimitado, follow-up auto, SLA, gestor dedicado
+Sem fidelização. Qual o tamanho da tua equipa?"
 """
 
     turns = []
