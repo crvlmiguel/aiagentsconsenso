@@ -178,12 +178,31 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
 
 async def _ensure_abby(db, tenant_id: str):
     """Provision Abby — ABBI Imóveis with full 9-property catalogue.
-    Idempotent — does nothing if an Abby agent already exists in the tenant."""
+    Idempotent — creates from scratch on a fresh DB, or refreshes the agent's
+    name/welcome/icebreakers/system_prompt on every restart so production keeps
+    in sync with seed_abbi.py without touching API keys or channels."""
+    abby_patch = {
+        "name": "Abby — ABBI Imóveis",
+        "welcome_message": "Olá! 👋 Sou a Abby da ABBI Imóveis. Posso ajudar-te a encontrar a casa certa, simular crédito ou marcar visitas.",
+        "icebreakers": [
+            "🏠 Comprar e simular prestação",
+            "🔑 Procurar casa para arrendar",
+            "📈 Imóveis para investimento",
+            "📑 Que documentos preciso?",
+        ],
+        "updated_at": _now(),
+    }
+
     existing = await db.agents.find_one(
         {"tenant_id": tenant_id, "name": {"$regex": "Abby|ABBI", "$options": "i"}},
         {"_id": 0},
     )
     if existing:
+        await db.agents.update_one({"id": existing["id"]}, {"$set": abby_patch})
+        logger.info(
+            f"[bootstrap] refreshed agent 'Abby — ABBI Imóveis' ({existing['id'][:8]}…) "
+            f"ice={len(abby_patch['icebreakers'])}"
+        )
         return
 
     # Lazy import to avoid loading the 9-property catalogue unless needed
@@ -312,6 +331,7 @@ async def bootstrap(db):
             DEMO_PROPERTIES as MARIA_DEMO,
         )
         from seed_staylocal import (
+            AGENT_NAME as SL_NAME,
             SYSTEM_PROMPT as SL_PROMPT,
             ICEBREAKERS as SL_ICE,
             WELCOME_MESSAGE as SL_WELCOME,
@@ -320,6 +340,7 @@ async def bootstrap(db):
             KNOWLEDGE_CHUNKS as SL_KB,
         )
         from seed_tejo_sailing import (
+            AGENT_NAME as TJ_NAME,
             SYSTEM_PROMPT as TJ_PROMPT,
             ICEBREAKERS as TJ_ICE,
             WELCOME_MESSAGE as TJ_WELCOME,
