@@ -1134,7 +1134,7 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
                 logger.warning(f"finance simulation failed: {e}")
 
     try:
-        resp = await generate_response(agent, history, intent, structure, retrieved, lang, session)
+        resp = await generate_response(agent, history, intent, structure, retrieved, lang, session, page_context=inbound.page_context)
     except (LLMConfigMissing, LLMProviderError) as e:
         resp = {"reply": str(e), "cards": [], "language": lang}
 
@@ -1439,7 +1439,7 @@ async def webchat_stream(tenant_id: str, inbound: InboundMessage):
             lang = _detect(inbound.text, agent.get("default_language", default_lang))
 
             full_reply = ""; full_follow = None; full_cards = []
-            async for evt in generate_response_stream(agent, history, intent, structure, retrieved, lang, session):
+            async for evt in generate_response_stream(agent, history, intent, structure, retrieved, lang, session, page_context=inbound.page_context):
                 if evt["type"] == "chunk":
                     yield f"data: {_json.dumps({'type':'chunk','text':evt['text']})}\n\n"
                 elif evt["type"] == "done":

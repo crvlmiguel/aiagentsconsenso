@@ -178,6 +178,7 @@ const params = new URLSearchParams(location.search);
 const API = params.get("api") || (location.origin + "/api");
 const TENANT = params.get("tenant");
 const AGENT_ID = params.get("agent") || "";
+const PAGE_CONTEXT = params.get("context") || params.get("page_context") || "";
 let NAME_V = params.get("name") || "Visitante";
 const UID = "w-" + Math.random().toString(36).slice(2,10);
 const msgs = document.getElementById("msgs");
@@ -483,7 +484,7 @@ async function send(text) {
       headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
       body: JSON.stringify({
         channel: "webchat", external_user_id: UID, contact_name: NAME_V,
-        text: text, agent_id: AGENT_ID || null,
+        text: text, agent_id: AGENT_ID || null, page_context: PAGE_CONTEXT || null,
       }),
     });
     if (!res.ok || !res.body) throw new Error("HTTP " + res.status);
@@ -620,7 +621,7 @@ async function send(text) {
       try {
         const j = await postWithRetry(API + "/webchat/" + TENANT + "/message", {
           channel: "webchat", external_user_id: UID, contact_name: NAME_V,
-          text: text, agent_id: AGENT_ID || null,
+          text: text, agent_id: AGENT_ID || null, page_context: PAGE_CONTEXT || null,
         });
         typing.remove();
         botMsg(j.reply || "…", [], []);

@@ -5,6 +5,7 @@ import unicodedata
 from typing import List, Dict, Any
 from .router import llm_complete, extract_json
 from .memory import collect_facts, format_facts_pt
+from .page_ctx import page_context_block
 
 logger = logging.getLogger(__name__)
 
@@ -169,8 +170,14 @@ async def generate_response(
     retrieved: List[dict],
     language: str,
     session_id: str,
+    page_context: str = None,
 ) -> Dict[str, Any]:
-    """Return {reply: str, cards: [...], language: str}."""
+    """Return {reply: str, cards: [...], language: str}.
+
+    page_context: optional area hint from the website (e.g. 'imobiliario',
+    'hotelaria', 'turismo', 'servicos'). Injected into the system prompt so
+    Maria starts the conversation already aligned to the right vertical.
+    """
     tone = agent.get("tone", "professional")
     rules = agent.get("rules", "")
     knowledge = agent.get("knowledge", "")
@@ -200,6 +207,7 @@ async def generate_response(
             break
     facts = collect_facts(history or [], last_user_text)
     facts_block = format_facts_pt(facts)
+    pc_block = page_context_block(page_context)
 
     system = f"""{base_prompt}
 
@@ -209,6 +217,8 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 
 {f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
+
+{pc_block}
 
 {facts_block}
 
@@ -429,12 +439,14 @@ async def generate_response_stream(
     retrieved: List[dict],
     language: str,
     session_id: str,
+    page_context: str = None,
 ):
     """Async generator yielding events:
       {"type": "chunk", "text": "delta"} — reply token deltas (progressive)
       {"type": "done", "reply": str, "follow_up": str|None, "cards": list, "language": str}
 
     Falls back to non-streaming generate_response on any error (caller decides how to expose).
+    page_context: optional area hint (e.g. 'hotelaria', 'imobiliario').
     """
     tone = agent.get("tone", "professional")
     rules = agent.get("rules", "")
@@ -459,6 +471,7 @@ async def generate_response_stream(
             break
     facts = collect_facts(history or [], last_user_text)
     facts_block = format_facts_pt(facts)
+    pc_block = page_context_block(page_context)
 
     system = f"""{base_prompt}
 
@@ -468,6 +481,8 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 
 {f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
+
+{pc_block}
 
 {facts_block}
 
@@ -518,7 +533,7 @@ Sem fidelização. Qual o tamanho da tua equipa?"
     except Exception as e:
         logger.warning(f"stream failed, falling back: {e}")
         # Fallback to non-streaming generate_response
-        full = await generate_response(agent, history, intent, structure, retrieved, language, session_id)
+        full = await generate_response(agent, history, intent, structure, retrieved, language, session_id, page_context=page_context)
         if last_emitted == "" and full.get("reply"):
             yield {"type": "chunk", "text": full["reply"]}
         yield {"type": "done", **full}

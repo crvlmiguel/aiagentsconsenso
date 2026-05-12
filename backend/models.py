@@ -189,6 +189,10 @@ class InboundMessage(BaseModel):
     text: str
     tenant_id: Optional[str] = None
     agent_id: Optional[str] = None
+    # Optional context hint from the website page where the widget is embedded.
+    # Used by the Consenso Plus website to bootstrap Maria into the right area
+    # (e.g. "imobiliario", "hotelaria", "turismo", "servicos"). Free-form, max 60 chars.
+    page_context: Optional[str] = None
 
 
 class SendMessageInput(BaseModel):

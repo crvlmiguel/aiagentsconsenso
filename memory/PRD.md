@@ -1,10 +1,47 @@
-# Consenso Plus — PRD (v3.18)
+# Consenso Plus — PRD (v3.19)
 
 ## Visão geral
 Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes para comunicar com clientes via **WhatsApp, Telegram, Instagram Direct e Facebook Messenger**, além de Webchat com **streaming token-a-token** e **cards imobiliários premium**. Cada agente é uma unidade completa e isolada (canais, email, fontes, IA, instalação).
 
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
+
+## v3.19 (2026-02) — Maria como Assistente IA global da plataforma Consenso Plus
+
+### Reposicionamento estratégico
+A Maria deixa de ser "consultora SDR imobiliária" e passa a ser **Assistente IA principal da CONSENSO PLUS**, com 4 áreas oficiais reconhecidas explicitamente:
+- 🏠 **Imobiliário**
+- 🛎️ **Hotelaria**
+- 🌍 **Turismo**
+- 💼 **Empresas de Serviços** (consolida clínicas, restauração, e-commerce, consultoria, atendimento corporativo)
+
+### Mudanças implementadas
+1. **System prompt re-escrito** (`seed_maria.py`):
+   - Identidade: "Assistente IA principal da CONSENSO PLUS"
+   - 4 áreas oficiais com hints de deteção por palavras-chave
+   - Setores adjacentes mapeados para "Empresas de Serviços"
+   - Imobiliário tratado como UMA das 4 áreas (não como default)
+   - Bloco "MODO IMOBILIÁRIO PREMIUM" condicional — só ativa com sinais explícitos
+
+2. **Welcome message neutro**: "Olá! 👋 Sou a Maria, a assistente IA da Consenso Plus. Posso ajudar-te a explorar a nossa plataforma. Em que área queres focar — Imobiliário, Hotelaria, Turismo ou Empresas de Serviços?"
+
+3. **Icebreakers atualizados** — 4 áreas + planos + demo:
+   - 🏠 Imobiliário · 🛎️ Hotelaria · 🌍 Turismo · 💼 Empresas de Serviços · 💰 Ver planos · 🎬 Marcar demo
+
+4. **Nome do agente**: "Maria — Consenso SDR AI" → "Maria — Assistente IA Consenso Plus"
+
+5. **`page_context` (novo, preparado para website futuro)** — campo opcional na `InboundMessage`:
+   - Widget aceita `?context=hotelaria` (ou `imobiliario`/`turismo`/`servicos`/`geral`) na URL e propaga no payload
+   - Backend mapeia em `ai/page_ctx.py` → injeta bloco `CONTEXTO DA PÁGINA:` no system prompt
+   - Maria arranca já focada na área certa quando o website Consenso Plus estiver pronto
+
+### Validação E2E
+- ✅ **Homepage neutra**: "Como posso ajudar-te hoje?" — zero suposições
+- ✅ **`page_context=hotelaria`**: foca em reservas, WhatsApp, suporte (sem imóveis)
+- ✅ **`page_context=turismo`**: lista as 4 áreas oficiais para confirmar
+- ✅ **Visitante imobiliária explícita**: apresenta planos com bullets, sem cards de imóveis (não pediu)
+- ✅ **"mostra-me imóveis em Lisboa"**: 3 cards (intenção explícita)
+- ✅ **63/63 pytest passed**, zero regressões
 
 ## v3.18 (2026-02) — Memória contextual + tom uniformizado + renderização de planos
 
