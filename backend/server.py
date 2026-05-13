@@ -4,6 +4,7 @@ import asyncio
 import logging
 from pathlib import Path
 from typing import List, Optional
+from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Request, Body
@@ -408,6 +409,65 @@ async def agent_analytics(agent_id: str, days: int = 30, claims=Depends(current_
 
 
 # ======================== AGENTS ========================
+def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
+    """Returns the seed-default content patch (system_prompt, icebreakers, welcome,
+    theme, avatar, knowledge) for a known seeded agent, or None for custom agents."""
+    name_low = (agent_name or "").lower()
+    try:
+        if "maria" in name_low:
+            from seed_maria import (
+                SYSTEM_PROMPT, ICEBREAKERS, WELCOME_MESSAGE, AVATAR_URL, THEME,
+                KNOWLEDGE_CHUNKS,
+            )
+            return {
+                "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
+                "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
+                "theme": THEME,
+                "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
+            }
+        if "staylocal" in name_low:
+            from seed_staylocal import (
+                SYSTEM_PROMPT, ICEBREAKERS, WELCOME_MESSAGE, AVATAR_URL, THEME,
+                KNOWLEDGE_CHUNKS,
+            )
+            return {
+                "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
+                "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
+                "theme": THEME,
+                "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
+            }
+        if "tejo" in name_low:
+            from seed_tejo_sailing import (
+                SYSTEM_PROMPT, ICEBREAKERS, WELCOME_MESSAGE, AVATAR_URL, THEME,
+                KNOWLEDGE_CHUNKS,
+            )
+            return {
+                "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
+                "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
+                "theme": THEME,
+                "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
+            }
+        if "abby" in name_low or "abbi" in name_low:
+            # Abby tem prompt inline no bootstrap; reset volta às icebreakers/welcome bootstrap.
+            return {
+                "welcome_message": "Olá! 👋 Sou a Abby da ABBI Imóveis. Posso ajudar-te a encontrar a casa certa, simular crédito ou marcar visitas.",
+                "icebreakers": [
+                    "🏠 Comprar e simular prestação",
+                    "🔑 Procurar casa para arrendar",
+                    "📈 Imóveis para investimento",
+                    "📑 Que documentos preciso?",
+                ],
+                "theme": {
+                    "primary": "#c9a84d", "primary_dark": "#a88838",
+                    "primary_soft": "#FAF4E2", "primary_border": "#E8D8A8",
+                    "bot": "#4e7bfa",
+                },
+            }
+    except Exception as e:
+        logger.warning(f"seed_patch_for_agent failed for '{agent_name}': {e}")
+    return None
+
+
 @api.get("/agents")
 async def list_agents(claims=Depends(current_user)):
     return await db.agents.find({"tenant_id": claims["tenant_id"]}, {"_id": 0}).to_list(200)
@@ -422,12 +482,39 @@ async def create_agent(inp: AgentInput, claims=Depends(current_user)):
 
 @api.put("/agents/{agent_id}")
 async def update_agent(agent_id: str, inp: AgentInput, claims=Depends(current_user)):
+    payload = inp.model_dump()
+    # Marca o agente como customizado pelo utilizador → bootstrap não vai
+    # reescrever system_prompt/icebreakers/welcome/theme em deploys futuros.
+    payload["is_customized"] = True
+    payload["updated_at"] = datetime.now(timezone.utc).isoformat()
     res = await db.agents.update_one(
         {"id": agent_id, "tenant_id": claims["tenant_id"]},
-        {"$set": inp.model_dump()},
+        {"$set": payload},
     )
     if res.matched_count == 0:
         raise HTTPException(404, "Agente não encontrado")
+    return await db.agents.find_one({"id": agent_id}, {"_id": 0})
+
+
+@api.post("/agents/{agent_id}/reset-defaults")
+async def reset_agent_defaults(agent_id: str, claims=Depends(current_user)):
+    """Reset system_prompt / icebreakers / welcome / theme / knowledge para os
+    valores predefinidos do seed, e remove a flag is_customized para que o
+    bootstrap volte a manter o agente sincronizado com o seed em futuros deploys."""
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0}
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+
+    # Encontra o seed correspondente pelo nome do agente
+    seed_patch = _seed_patch_for_agent(agent.get("name", ""))
+    if not seed_patch:
+        raise HTTPException(400, "Este agente não tem predefinição disponível.")
+
+    seed_patch["is_customized"] = False
+    seed_patch["updated_at"] = datetime.now(timezone.utc).isoformat()
+    await db.agents.update_one({"id": agent_id}, {"$set": seed_patch})
     return await db.agents.find_one({"id": agent_id}, {"_id": 0})
 
 

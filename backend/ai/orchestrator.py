@@ -6,6 +6,7 @@ from typing import List, Dict, Any
 from .router import llm_complete, extract_json
 from .memory import collect_facts, format_facts_pt
 from .page_ctx import page_context_block
+from .global_rules import global_rules_block
 
 logger = logging.getLogger(__name__)
 
@@ -27,14 +28,44 @@ _BAD_GENERIC_FOLLOWUPS = {
     "tens alguma duvida", "queres continuar",
     "o que achas", "queres saber mais detalhes",
     "alguma duvida", "posso ajudar", "queres saber",
+    "estou aqui para ajudar", "estou disponivel", "estou ca",
+    "diz me como posso ajudar", "como posso ajudar",
+    "espero ter ajudado", "espero que ajude",
+    "se precisares de mais", "se quiseres saber mais",
+    "qualquer questao", "qualquer duvida", "diz me se",
+    "podemos continuar", "fala comigo", "conta me mais",
+    "se precisares", "fico a aguardar", "fico a espera",
 }
+
+# Quando a follow_up adiciona valor REAL (link, contacto, dado concreto) — sempre aceitar
+_FOLLOWUP_VALUE_KEYWORDS = (
+    "http", "https", ".eu", ".com", ".pt", "consenso-shop", "marcar-reuniao",
+    "@", "+351", "telefone", "whatsapp",
+)
+
+
+def _reply_already_has_cta(reply_text: str) -> bool:
+    """True if reply already ends with a question or contains a link/CTA.
+    In that case follow_up should be empty by default."""
+    if not reply_text:
+        return False
+    rstripped = reply_text.rstrip()
+    if rstripped.endswith("?") or rstripped.endswith("👇"):
+        return True
+    low = reply_text.lower()
+    return any(k in low for k in _FOLLOWUP_VALUE_KEYWORDS)
 
 
 def _filter_redundant_followup(reply_text: str, follow_up: str) -> str:
-    """Anti-redundância: descarta follow_ups que:
-       - usam frases genéricas sem valor ("queres saber mais?")
-       - parafraseiam o reply (overlap > 65%)
+    """Anti-redundância CONSENSO PLUS — Regra Global #3 e #9:
+    Por defeito, follow_up deve ser vazio. Só é aceite quando acrescenta valor
+    real (link, dado concreto, pergunta nova).
+
+    Descarta follow_ups que:
+       - usam frases genéricas sem valor ("queres saber mais?", "estou aqui")
+       - parafraseiam o reply (overlap > 55%)
        - duplicam pergunta quando reply já termina com ?
+       - reply já contém link/CTA e follow_up não acrescenta valor novo
     Returns: follow_up filtrado (possivelmente None/"")."""
     if not follow_up or not isinstance(follow_up, str):
         return None
@@ -46,28 +77,36 @@ def _filter_redundant_followup(reply_text: str, follow_up: str) -> str:
 
     fu_norm = _normalize_for_dedup(follow_up)
     rp_norm = _normalize_for_dedup(reply_text)
+    fu_low = follow_up.lower()
+    adds_value = any(k in fu_low for k in _FOLLOWUP_VALUE_KEYWORDS)
 
     # 1. Generic without value → cut
     if any(g in fu_norm for g in _BAD_GENERIC_FOLLOWUPS):
         return None
 
-    # 2. Paraphrase of reply (overlap > 65%) → cut
+    # 2. Paraphrase of reply (overlap > 55%) → cut, UNLESS follow_up adds a link
     if fu_norm and rp_norm:
         words_fu = set(fu_norm.split())
         words_rp = set(rp_norm.split())
-        if len(words_fu) >= 3 and len(words_fu & words_rp) / len(words_fu) > 0.65:
-            return None
+        if len(words_fu) >= 3 and len(words_fu & words_rp) / len(words_fu) > 0.55:
+            if not adds_value:
+                return None
 
     # 3. Reply ends with question + follow_up is also a question without
-    # added value (link, contact info) → cut
+    # added value → cut
     if reply_text.rstrip().endswith("?") and follow_up.rstrip().endswith("?"):
-        fu_low = follow_up.lower()
-        adds_value = any(k in fu_low for k in (
-            "http", "https", ".eu", ".com", "consenso-shop", "marcar-reuniao",
-            "agendar", "marcar", "@",
-        ))
         if not adds_value:
             return None
+
+    # 4. Reply already has CTA/link and follow_up doesn't add new value → cut
+    if _reply_already_has_cta(reply_text) and not adds_value:
+        # Allow follow_up só se for uma pergunta curta e específica (≤ 60 chars)
+        if not follow_up.rstrip().endswith("?") or len(follow_up) > 60:
+            return None
+
+    # 5. Follow-up demasiado curto/vago (< 8 chars) → cut
+    if len(follow_up.strip()) < 8:
+        return None
 
     return follow_up
 
@@ -208,12 +247,15 @@ async def generate_response(
     facts = collect_facts(history or [], last_user_text)
     facts_block = format_facts_pt(facts)
     pc_block = page_context_block(page_context)
+    rules_global = global_rules_block(language=language or default_lang)
 
     system = f"""{base_prompt}
 
-Tom: {tone}.
+{rules_global}
+
+Tom específico do agente: {tone}.
 Objetivo: {agent.get('goal', 'Ajudar o cliente')}.
-Regras: {rules or 'Sê conciso. Sê honesto.'}
+Regras adicionais: {rules or '(nenhuma)'}
 
 {f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
@@ -222,13 +264,10 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 
 {facts_block}
 
-INSTRUÇÕES (CRÍTICO):
-- 🧠 MEMÓRIA: Se houver bloco "JÁ SABEMOS DO UTILIZADOR" acima, NUNCA voltes a perguntar essas informações. Usa-as diretamente na resposta. Avança naturalmente para o próximo passo (proposta de plano, demo, link).
-- 🇵🇹 TOM (CRÍTICO): SEMPRE Português Europeu informal "tu" (tu, teu, contigo, posso ajudar-te, queres). NUNCA "você/sua/seu/pretende/poderia/o senhor/vocês". Modern, próximo mas profissional. Banido pt-BR.
-- 🚫 ANTI-REPETIÇÃO: Verifica o histórico antes de fazer uma pergunta. Se o utilizador já respondeu, NÃO repitas a pergunta nem a reformules. NUNCA peças "desculpa pela confusão" repetidamente — apenas avança.
+INSTRUÇÕES TÉCNICAS (acima das regras globais):
 - 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", o sistema mostrou ao cliente um cartão visual. Comenta brevemente (1 frase) e pergunta o próximo dado em falta ou propõe visita.
-- FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "msg opcional só se acrescentar VALOR NOVO", "use_items": [1,2]}}
-- "follow_up" deve ser **VAZIO ("")** sempre que possível. Só usar se for um link de agendamento ou um dado concreto novo. NUNCA parafrasear o reply nem dizer "Estou aqui para ajudar".
+- FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "", "use_items": [1,2]}}
+- 🚫 "follow_up" deve ser VAZIO ("") POR DEFEITO — só preencher nos casos do ponto 9 das regras globais (após captura de lead, ou link de agendamento). NUNCA parafrasear o reply.
 - MENSAGENS COMPACTAS mas COMPLETAS — prefere 1 mensagem rica em vez de 2 fragmentadas. Max 400 chars.
 - "use_items" lista [1..N] de imóveis a mostrar. Lista vazia [] se nenhum encaixa OU se o cliente NÃO demonstrou intenção imobiliária clara.
 - NÃO copies título/preço/link dos imóveis no reply — aparecem como cards automaticamente.
@@ -472,12 +511,15 @@ async def generate_response_stream(
     facts = collect_facts(history or [], last_user_text)
     facts_block = format_facts_pt(facts)
     pc_block = page_context_block(page_context)
+    rules_global = global_rules_block(language=reply_lang)
 
     system = f"""{base_prompt}
 
-Tom: {tone}.
+{rules_global}
+
+Tom específico do agente: {tone}.
 Objetivo: {agent.get('goal', 'Ajudar o cliente')}.
-Regras: {rules or 'Sê conciso. Sê honesto.'}
+Regras adicionais: {rules or '(nenhuma)'}
 
 {f"Imóveis disponíveis nas fontes:{chr(10)}{items_summary}" if items_summary else ""}
 {f"Conhecimento adicional: {knowledge}" if knowledge else ""}
@@ -486,25 +528,14 @@ Regras: {rules or 'Sê conciso. Sê honesto.'}
 
 {facts_block}
 
-INSTRUÇÕES (CRÍTICO):
-- 🧠 MEMÓRIA: Se houver bloco "JÁ SABEMOS DO UTILIZADOR" acima, NUNCA voltes a perguntar essas informações. Usa-as e avança.
-- 🇵🇹 TOM: SEMPRE Português Europeu informal "tu" (tu, teu, contigo). NUNCA "você/sua/seu/pretende/poderia". Banido pt-BR.
-- 🚫 ANTI-REPETIÇÃO: Se o utilizador já respondeu, NÃO repitas a pergunta. NUNCA digas "desculpa pela confusão" — apenas avança.
+INSTRUÇÕES TÉCNICAS (acima das regras globais):
 - 🌍 IDIOMA: o cliente fala em "{reply_lang}". Responde EXCLUSIVAMENTE nesse idioma. NUNCA pt-BR.
 - 🧮 SIMULAÇÃO CRÉDITO: se o contexto mencionar "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", o cartão já está visível. Comenta em 1 frase. Podes pedir entrada/prazo/idade mas NUNCA Euribor/spread.
 - 🏠 IMÓVEIS: só apresenta cards se houver intenção imobiliária explícita. NUNCA em conversas sobre planos, demos, hotelaria, clínicas.
-- 📅 AGENDAMENTO: se houver interesse comercial (demo, reunião, "saber mais"), partilha o link: https://consenso-shop.eu/marcar-reuniao
-- FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "só se acrescentar valor novo", "use_items": [1,2]}}
-- EMITE "reply" PRIMEIRO. follow_up VAZIO ("") sempre que possível. Max 400 chars.
+- FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "", "use_items": [1,2]}}
+- EMITE "reply" PRIMEIRO. follow_up VAZIO ("") por defeito — só preencher nos casos do ponto 9 das regras globais. Max 400 chars.
 - Lista vazia [] em use_items se nenhum imóvel encaixar.
 - NÃO copies título/preço/link no reply.
-
-📋 PLANOS — usa quebras de linha REAIS (cada bullet em nova linha, NUNCA "\\•" literal):
-"Temos 3 planos:
-• STARTER €49,90/mês — 2 utilizadores, 2.000 msg, Webchat + WhatsApp
-• PRO €74,90/mês ⭐ Mais Popular — 5 utilizadores, ilimitadas, 5 canais, CRM e Lead Scoring
-• ENTERPRISE sob consulta — ilimitado, follow-up auto, SLA, gestor dedicado
-Sem fidelização. Qual o tamanho da tua equipa?"
 """
 
     turns = []

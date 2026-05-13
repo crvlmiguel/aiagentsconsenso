@@ -6,7 +6,7 @@ import AgentAutomation from "../components/AgentAutomation";
 import {
   Bot, Trash2, Plus, Save, Sparkles, Database,
   KeyRound, CheckCircle2, AlertTriangle, MessageSquare, Send, X,
-  Mail, Copy, Globe, Phone, Code2, Eye, Zap, Instagram,
+  Mail, Copy, Globe, Phone, Code2, Eye, Zap, Instagram, Palette, RotateCcw,
 } from "lucide-react";
 
 const defaultAgent = {
@@ -33,12 +33,28 @@ const defaultAgent = {
     enabled: false, host: "", port: 587, secure: "tls",
     username: "", password: "", from_email: "", notify_email: "",
   },
+  theme: {
+    primary: "#4591CE",
+    primary_dark: "#2C6FA8",
+    primary_soft: "#E8F1F9",
+    primary_border: "#C7DDF0",
+    bot: "#E4AC1E",
+  },
   active: true,
+};
+
+const DEFAULT_THEME = {
+  primary: "#4591CE",
+  primary_dark: "#2C6FA8",
+  primary_soft: "#E8F1F9",
+  primary_border: "#C7DDF0",
+  bot: "#E4AC1E",
 };
 
 const TABS = [
   { k: "identity", label: "Identidade", icon: Bot },
   { k: "ai", label: "IA & Instruções", icon: Sparkles },
+  { k: "visual", label: "Visual & Cores", icon: Palette },
   { k: "channels", label: "Canais", icon: Zap },
   { k: "email", label: "Email", icon: Mail },
   { k: "install", label: "Instalação", icon: Code2 },
@@ -174,6 +190,22 @@ const Agentes = () => {
     update("channels", channels);
   };
   const updateEmail = (k, v) => update("email", { ...(selected.email || {}), [k]: v });
+  const updateTheme = (k, v) => update("theme", { ...(selected.theme || {}), [k]: v });
+  const resetTheme = () => update("theme", { ...DEFAULT_THEME });
+
+  const resetDefaults = async () => {
+    if (!selected?.id) { toast.error("Guarde o agente antes de repor."); return; }
+    if (!window.confirm("Repor o prompt, icebreakers, mensagem de boas-vindas e tema para os valores predefinidos? As tuas customizações deste agente serão perdidas.")) return;
+    try {
+      const { data } = await api.post(`/agents/${selected.id}/reset-defaults`);
+      setSelected(data);
+      toast.success("Predefinições repostas.");
+      load();
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Falha a repor predefinições");
+    }
+  };
+
   const addIce = () => update("icebreakers", [...(selected.icebreakers || []), ""]);
   const updIce = (i, v) => {
     const ices = [...(selected.icebreakers || [])];
@@ -460,18 +492,26 @@ const Agentes = () => {
                 </div>
 
                 <div className="card-surface p-6">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <div className="font-display font-semibold">Comportamento do agente</div>
+                      <p className="text-xs text-[#5B6B82] mt-0.5">
+                        Edita tom, objetivo, prompt do sistema, regras e conhecimento inline. As <b>regras globais Consenso Plus</b> (tom PT-PT, 1 mensagem por turno, sem repetir perguntas) são aplicadas automaticamente <i>por cima</i> destas.
+                      </p>
+                    </div>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div><label className="label">Tom</label>
                       <input data-testid="agent-tone" value={selected.tone} onChange={(e) => update("tone", e.target.value)} className="input-base" /></div>
                     <div><label className="label">Objetivo</label>
                       <input data-testid="agent-goal" value={selected.goal} onChange={(e) => update("goal", e.target.value)} className="input-base" /></div>
                   </div>
-                  <label className="label mt-4">Prompt do sistema</label>
-                  <textarea data-testid="agent-system-prompt" rows={4} value={selected.system_prompt} onChange={(e) => update("system_prompt", e.target.value)} className="input-base" />
-                  <label className="label mt-4">Regras</label>
-                  <textarea data-testid="agent-rules" rows={3} value={selected.rules} onChange={(e) => update("rules", e.target.value)} className="input-base" />
+                  <label className="label mt-4">Prompt do sistema <span className="text-[10px] font-normal text-[#5B6B82]">(modo avançado — edita com cuidado)</span></label>
+                  <textarea data-testid="agent-system-prompt" rows={10} value={selected.system_prompt} onChange={(e) => update("system_prompt", e.target.value)} className="input-base font-mono text-xs" />
+                  <label className="label mt-4">Regras adicionais</label>
+                  <textarea data-testid="agent-rules" rows={4} value={selected.rules} onChange={(e) => update("rules", e.target.value)} className="input-base text-sm" />
                   <label className="label mt-4">Conhecimento inline</label>
-                  <textarea data-testid="agent-knowledge" rows={3} value={selected.knowledge} onChange={(e) => update("knowledge", e.target.value)} className="input-base" />
+                  <textarea data-testid="agent-knowledge" rows={4} value={selected.knowledge} onChange={(e) => update("knowledge", e.target.value)} className="input-base text-sm" />
                 </div>
 
                 {!configured && selected.api_provider !== "emergent" && (
@@ -479,6 +519,152 @@ const Agentes = () => {
                     <AlertTriangle size={14} /> Por favor configure a API da IA para ativar o agente.
                   </div>
                 )}
+
+                {selected.id && (
+                  <div className="card-surface p-6 border-dashed border-2 border-[#FCD9B6] bg-[#FFF9F0]">
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <div className="flex items-center gap-2 font-display font-semibold text-[#92450C]">
+                          <RotateCcw size={14} /> Repor predefinições do seed
+                        </div>
+                        <p className="text-xs text-[#92450C]/80 mt-1">
+                          Repõe o <b>prompt</b>, <b>regras</b>, <b>icebreakers</b>, <b>mensagem de boas-vindas</b> e <b>tema</b> deste agente para a versão oficial da Consenso Plus. As tuas customizações deste agente serão substituídas.
+                        </p>
+                        {selected.is_customized && (
+                          <div className="mt-2 inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-[#FEF3C7] text-[#92400E] border border-[#FCD34D]">
+                            <Sparkles size={10} /> Modo Customizado · bootstrap não substitui
+                          </div>
+                        )}
+                      </div>
+                      <button data-testid="btn-reset-defaults" onClick={resetDefaults}
+                        className="btn-ghost text-[12px] whitespace-nowrap border border-[#FCD9B6] text-[#92450C] hover:bg-[#FCD9B6]/30">
+                        <RotateCcw size={11} /> Repor predefinições
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* ======= VISUAL & CORES ======= */}
+            {tab === "visual" && (
+              <div className="space-y-5" data-testid="visual-panel">
+                <div className="card-surface p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div>
+                      <div className="flex items-center gap-2 font-display font-semibold">
+                        <Palette size={16} className="text-[#0069FE]" />
+                        Cores do widget
+                      </div>
+                      <p className="text-xs text-[#5B6B82] mt-1">
+                        Personaliza as cores do chat para combinar com a tua marca. O widget no website do cliente reflete estas cores automaticamente.
+                      </p>
+                    </div>
+                    <button type="button" data-testid="btn-reset-theme" onClick={resetTheme}
+                      className="btn-ghost text-[12px]"><RotateCcw size={11} /> Repor cores</button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-5">
+                    {[
+                      { k: "primary", label: "Cor principal (header + botão enviar)", desc: "Usada no header do chat e no botão de envio." },
+                      { k: "primary_dark", label: "Cor principal escura", desc: "Usada como gradiente no header e em hover states." },
+                      { k: "primary_soft", label: "Cor suave (fundos)", desc: "Fundos de avatar, focus ring e superfícies suaves." },
+                      { k: "primary_border", label: "Cor da borda dos icebreakers", desc: "Borda dos botões de sugestão (icebreakers)." },
+                      { k: "bot", label: "Cor de acento (bot · preços · destaques)", desc: "Realce de preços, badges e elementos do bot." },
+                    ].map(({ k, label, desc }) => {
+                      const value = selected.theme?.[k] || DEFAULT_THEME[k];
+                      return (
+                        <div key={k} data-testid={`theme-row-${k}`} className="border border-[#E5EAF2] rounded-xl p-3">
+                          <label className="label">{label}</label>
+                          <div className="flex items-center gap-2 mt-1">
+                            <input type="color" data-testid={`theme-color-${k}`}
+                              value={value}
+                              onChange={(e) => updateTheme(k, e.target.value)}
+                              className="w-12 h-10 rounded-lg border border-[#E5EAF2] cursor-pointer bg-white p-0.5" />
+                            <input type="text" data-testid={`theme-hex-${k}`}
+                              value={value}
+                              onChange={(e) => updateTheme(k, e.target.value)}
+                              placeholder="#4591CE"
+                              className="input-base flex-1 font-mono text-sm uppercase" />
+                          </div>
+                          <p className="text-[11px] text-[#5B6B82] mt-1">{desc}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Live preview of theme */}
+                <div className="card-surface p-0 overflow-hidden" data-testid="theme-preview">
+                  <div className="p-4 flex items-center gap-3 text-white"
+                    style={{ background: `linear-gradient(135deg, ${selected.theme?.primary || DEFAULT_THEME.primary} 0%, ${selected.theme?.primary_dark || DEFAULT_THEME.primary_dark} 100%)` }}>
+                    <div className="w-11 h-11 rounded-full bg-white/20 border-2 border-white/30 flex items-center justify-center overflow-hidden">
+                      {selected.avatar_url
+                        ? <img src={selected.avatar_url} alt={selected.name} className="w-full h-full object-cover" onError={(e) => { e.target.style.display = "none"; }} />
+                        : <span className="font-bold">{(selected.name || "A").slice(0, 2).toUpperCase()}</span>}
+                    </div>
+                    <div>
+                      <div className="font-semibold">{selected.name || "Agente"}</div>
+                      <div className="text-[11px] opacity-90">Pré-visualização ao vivo</div>
+                    </div>
+                  </div>
+                  <div className="p-4 space-y-3" style={{ background: "#F7F9FC" }}>
+                    {/* bot bubble */}
+                    <div className="flex gap-2 items-start">
+                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center"
+                        style={{ background: selected.theme?.primary_soft || DEFAULT_THEME.primary_soft, color: selected.theme?.primary || DEFAULT_THEME.primary }}>
+                        <Bot size={12} />
+                      </div>
+                      <div className="max-w-[78%] rounded-2xl rounded-bl-sm px-3 py-2 bg-white border text-sm"
+                        style={{ borderColor: selected.theme?.primary_border || DEFAULT_THEME.primary_border }}>
+                        {selected.welcome_message || "Olá! Como posso ajudar?"}
+                      </div>
+                    </div>
+                    {/* icebreakers */}
+                    {(selected.icebreakers || []).filter(Boolean).slice(0, 3).length > 0 && (
+                      <div className="flex flex-wrap gap-2 pl-9">
+                        {(selected.icebreakers || []).filter(Boolean).slice(0, 3).map((q, i) => (
+                          <span key={i} className="text-xs px-3 py-1.5 rounded-full bg-white border"
+                            style={{
+                              borderColor: selected.theme?.primary_border || DEFAULT_THEME.primary_border,
+                              color: selected.theme?.primary || DEFAULT_THEME.primary,
+                            }}>
+                            {q}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {/* example bot with price highlight */}
+                    <div className="flex gap-2 items-start">
+                      <div className="w-7 h-7 rounded-full flex-shrink-0 flex items-center justify-center"
+                        style={{ background: selected.theme?.primary_soft || DEFAULT_THEME.primary_soft, color: selected.theme?.primary || DEFAULT_THEME.primary }}>
+                        <Bot size={12} />
+                      </div>
+                      <div className="max-w-[78%] rounded-2xl rounded-bl-sm px-3 py-2 bg-white border text-sm space-y-1"
+                        style={{ borderColor: selected.theme?.primary_border || DEFAULT_THEME.primary_border }}>
+                        <div>O plano <b style={{ color: selected.theme?.bot || DEFAULT_THEME.bot }}>PRO</b> tem mensagens ilimitadas e CRM.</div>
+                        <div className="text-xs font-bold" style={{ color: selected.theme?.bot || DEFAULT_THEME.bot }}>€74,90/mês</div>
+                      </div>
+                    </div>
+                    {/* user bubble */}
+                    <div className="flex justify-end">
+                      <div className="max-w-[78%] rounded-2xl rounded-br-sm px-3 py-2 text-white text-sm"
+                        style={{ background: selected.theme?.primary || DEFAULT_THEME.primary }}>
+                        Quero saber mais sobre o plano PRO.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="p-3 border-t flex gap-2 bg-white"
+                    style={{ borderColor: selected.theme?.primary_border || DEFAULT_THEME.primary_border }}>
+                    <input disabled placeholder="Escrever mensagem…"
+                      className="input-base flex-1 text-sm bg-[#F7F9FC]" />
+                    <button type="button" disabled
+                      className="px-3 py-2 rounded-lg text-white text-sm"
+                      style={{ background: selected.theme?.primary || DEFAULT_THEME.primary }}>
+                      <Send size={12} />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
 

@@ -145,14 +145,31 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
     }
 
     if existing:
-        await db.agents.update_one(
-            {"id": existing["id"]},
-            {"$set": content_patch},
-        )
-        logger.info(
-            f"[bootstrap] refreshed agent '{name}' ({existing['id'][:8]}…) "
-            f"prompt_len={len(agent_def['system_prompt'])} ice={len(agent_def.get('icebreakers', []))} kb_chunks={len(kb)}"
-        )
+        # Se o utilizador customizou o agente via dashboard, preservamos os
+        # campos de conteúdo (prompt, icebreakers, welcome, theme, knowledge).
+        # Caso contrário, sincronizamos sempre com a versão do seed.
+        if existing.get("is_customized"):
+            # Apenas refresca metadados de fonte de dados (data_source_ids) +
+            # avatar (se ainda não definido). Mantém TUDO O resto definido pelo user.
+            minimal_patch = {
+                "data_source_ids": [source_id],
+                "updated_at": _now(),
+            }
+            if not existing.get("avatar_url"):
+                minimal_patch["avatar_url"] = agent_def.get("avatar_url", "")
+            await db.agents.update_one({"id": existing["id"]}, {"$set": minimal_patch})
+            logger.info(
+                f"[bootstrap] agent '{name}' is_customized=true → preservadas customizações do dashboard"
+            )
+        else:
+            await db.agents.update_one(
+                {"id": existing["id"]},
+                {"$set": content_patch},
+            )
+            logger.info(
+                f"[bootstrap] refreshed agent '{name}' ({existing['id'][:8]}…) "
+                f"prompt_len={len(agent_def['system_prompt'])} ice={len(agent_def.get('icebreakers', []))} kb_chunks={len(kb)}"
+            )
     else:
         agent_id = str(uuid.uuid4())
         await db.agents.insert_one({
@@ -198,6 +215,9 @@ async def _ensure_abby(db, tenant_id: str):
         {"_id": 0},
     )
     if existing:
+        if existing.get("is_customized"):
+            logger.info(f"[bootstrap] Abby is_customized=true → preservadas customizações do dashboard")
+            return
         await db.agents.update_one({"id": existing["id"]}, {"$set": abby_patch})
         logger.info(
             f"[bootstrap] refreshed agent 'Abby — ABBI Imóveis' ({existing['id'][:8]}…) "

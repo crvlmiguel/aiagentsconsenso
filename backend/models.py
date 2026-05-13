@@ -81,6 +81,8 @@ class Agent(BaseModel):
     notify_email: str = ""
     channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     email: Dict[str, Any] = Field(default_factory=dict)
+    theme: Dict[str, Any] = Field(default_factory=dict)
+    is_customized: bool = False
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
@@ -105,6 +107,7 @@ class AgentInput(BaseModel):
     notify_email: str = ""
     channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     email: Dict[str, Any] = Field(default_factory=dict)
+    theme: Dict[str, Any] = Field(default_factory=dict)
     active: bool = True
 
 

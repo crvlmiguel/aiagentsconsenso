@@ -1,0 +1,45 @@
+{
+  "summary": "iter14 — CONSENSO PLUS global rules + customization endpoints tested end-to-end (BACKEND ONLY as requested). 12 new tests in /app/backend/tests/test_iter14_global_rules.py — 11/12 passed on first run; remaining 1 (TestAgentModel.test_list_agents_has_theme_and_is_customized) passed on re-run after reset-defaults populated the field. Underlying minor bootstrap gap is reported below. Regression: prior phase1 + v2_config suites still 25 passed / 13 skipped / 0 failed in 0.17s — zero regressions.\n\nCoverage details:\n- POST /api/agents/{id}/reset-defaults: PASSED for all 4 seeded agents (Maria, StayLocal, Tejo, Abby) — endpoint correctly reverts welcome_message+theme+system_prompt+icebreakers to seed and sets is_customized=False. Verified by first PUT-customizing (welcome='TEST_iter14 custom welcome…', theme.primary=#123456) then reset.\n- PUT /api/agents/{id}: PASSED — sets is_customized=true automatically (server.py L488) and persists the theme dict (primary/primary_dark/primary_soft/primary_border/bot). Verified via subsequent GET /api/agents listing.\n- GET /api/agents model shape: theme + is_customized fields are present for ALL 4 agents AFTER any PUT or reset-defaults call. On a totally fresh bootstrap they would be missing because bootstrap inserts (Abby L289-310 and _ensure_agent_with_kb L175) do NOT include is_customized=False initially. Minor issue documented below.\n- Maria global rules via POST /agents/{id}/test:\n  * Plans layout 'Olá, quanto custa?' → reply contains STARTER + PRO + ENTERPRISE + prices €49,90 and €74,90 in ONE message, follow_up empty. PASSED.\n  * Anti-loop on 'eu' → no apology phrases ('desculpa pela confusão' / 'perdi-me' / 'podes repetir'). PASSED.\n  * Sector hotelaria 'Tenho um hotel em Lisboa, como funciona?' → no property cards (cards=[] / no kind=property). PASSED.\n  * Multi-language 'Hello, what plans do you have?' → language=en, no pt-BR tokens, EN tokens present. PASSED.\n  * follow_up filter — when reply ends in '?', follow_up is None/empty. PASSED.\n  * No generic follow_ups ('queres saber mais', 'estou aqui para ajudar', etc.) across 3 distinct prompts. PASSED.\n\nBootstrap idempotency was NOT exercised by physically restarting the backend (would risk unrelated breakage); instead verified at the model/contract level: PUT correctly sets is_customized=true (server.py L488), reset-defaults sets is_customized=false (L515), and bootstrap code paths at /app/backend/bootstrap.py L151 (_ensure_agent_with_kb) and L218 (_ensure_abby) gate on `if existing.get('is_customized'): preserve` — code review confirms this is correctly implemented.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "GET /api/agents",
+        "issue": "Newly seeded agents (e.g. fresh-DB Abby created by bootstrap._ensure_abby at L289-310) do NOT have `is_customized` field stored in MongoDB — the Pydantic Agent model default (False) is not applied because list_agents (server.py L471-473) returns raw db.agents.find() docs. Field becomes present only after the first PUT (which sets is_customized=true) or first POST /reset-defaults (sets False). Tests confirmed this: TestAgentModel failed on first run because Abby was never customized yet; passed on rerun after reset-defaults touched her. Fix options: (1) add `is_customized: False, theme: {...}` to all bootstrap insert payloads (_ensure_abby L289 + _ensure_agent_with_kb L175), or (2) hydrate the response in list_agents through the Agent model (Agent(**doc).model_dump())."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter14_global_rules.py",
+    "/app/test_reports/pytest/iter14_global_rules.xml",
+    "/app/test_reports/pytest/iter14_regression.xml"
+  ],
+  "action_items": [
+    "MINOR: In bootstrap.py, add `is_customized: False` (and explicit `theme: {...}`) to the initial insert payloads for Abby (L289-310) and for _ensure_agent_with_kb (L175). This guarantees GET /api/agents always exposes the contract documented in models.py — currently the fields only appear AFTER the first PUT or reset-defaults. Alternatively, hydrate via Agent(**doc).model_dump() inside list_agents. Not blocking — runtime gates use .get('is_customized') which still resolves to None=falsy."
+  ],
+  "critical_code_review_comments": [
+    "server.py L483-496 (PUT /agents/{id}) — correctly forces is_customized=true on every update via payload['is_customized']=True, so user can't accidentally PUT is_customized=false. Good.",
+    "server.py L499-518 (POST /agents/{id}/reset-defaults) — uses _seed_patch_for_agent helper which lazily imports from seed_maria / seed_staylocal / seed_tejo_sailing; Abby has an inline patch (no seed_abbi.SYSTEM_PROMPT to re-export). The Abby reset patch (L452-465) does NOT include system_prompt, so reset for Abby keeps the latest bootstrap-set prompt rather than re-pulling from any seed file. This is intentional given Abby's prompt lives in bootstrap.py L267-287, but worth noting: editing Abby's system_prompt and then reset will REVERT only welcome+icebreakers+theme, not the prompt. Recommend either (a) moving Abby's prompt to a seed_abbi module and re-exporting, or (b) inlining the prompt in _seed_patch_for_agent's abby branch so reset behaviour is uniform across all 4 agents.",
+    "bootstrap.py L151+ (_ensure_agent_with_kb) and L218+ (_ensure_abby) — the is_customized gating is correct, but neither branch sets is_customized:False on the initial insert. Combined with raw mongodb find(), this creates the contract gap described in backend_issues.minor.",
+    "ai/global_rules.py — clean single-file module exporting GLOBAL_RULES_PT + global_rules_block(language). Currently PT-only (hardcoded return). The IDIOMA DINÂMICO rule is inside the PT block so the LLM does respond in EN/FR/etc. when the user does — verified empirically in test_multi_language_english. Fine for now.",
+    "ai/orchestrator.py L47-110 — _reply_already_has_cta + _filter_redundant_followup are tight: they cut generic follow_ups, paraphrase follow_ups (>55% overlap), duplicate-question follow_ups, and follow_ups <8 chars. Test_follow_up_never_generic confirmed across 3 prompts. Solid implementation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter14_global_rules.py (NEW — 12 tests: 1 model shape, 4 reset-defaults parametrized, 1 PUT customization+theme, 6 Maria global-rules via /test)"
+  ],
+  "success_rate": {
+    "backend": "100% on retest (12/12 — TestAgentModel passed on second run; root cause documented as minor bootstrap gap). Full new-test pass rate first-run: 91.7% (11/12). Regression suite: 25 passed / 13 skipped / 0 failed.",
+    "frontend": "N/A — testing_type=backend only"
+  },
+  "test_credentials": "admin@consenso-agents.com / 100%Consenso (tenant b63f7593-d59a-491d-8c91-e28caea3f760)",
+  "seed_data_creation": "No persistent seed data created. The TestResetDefaults class temporarily mutates each of the 4 seeded agents (welcome+theme) and then calls reset-defaults to revert. End state of all 4 agents: is_customized=False, themes restored to seed values (Maria #4591CE, StayLocal #1B3A5C, Tejo #D97543, Abby #c9a84d).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run with: `pytest backend/tests/test_iter14_global_rules.py -v` (~23s, hits real /test endpoint backed by OpenAI ~6 LLM calls). The TestAgentModel test depends on the 4 seeded agents having `is_customized` already present in DB — which they will, after this iter ran the reset-defaults tests at least once. On a totally fresh bootstrap (no DB), this single test will fail for Abby and any other newly-bootstrapped agent until either bootstrap is patched or PUT/reset-defaults is called once. The 6 Maria conversational tests rely on the LLM but have loose-enough assertions (substring checks, no exact wording) to absorb non-determinism. If the LLM ever omits one of STARTER/PRO/ENTERPRISE the test_plans_layout test will fail — retry once before reporting flake.",
+  "rca of the issue": "Minor: GET /api/agents may omit `is_customized` (and `theme` when bootstrap inserts didn't include it) for agents that have never been PUT or reset. Root cause: bootstrap insert payloads in /app/backend/bootstrap.py do not include `is_customized: False`, and list_agents at server.py L471-473 returns raw mongodb docs without hydrating via the Agent pydantic model (which would apply defaults). Reproduction: drop the agents collection, restart backend, GET /api/agents — Abby + any _ensure_agent_with_kb-created agent will lack `is_customized`. Mitigation: include `is_customized: False` in the bootstrap insert payloads (~2 line change in bootstrap.py); OR change list_agents to `[Agent(**doc).model_dump() for doc in await db.agents.find({...},{'_id':0}).to_list(200)]`. Not blocking — runtime gates use truthy-check and tolerate missing field."
+}
