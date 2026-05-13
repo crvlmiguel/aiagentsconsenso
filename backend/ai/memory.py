@@ -96,14 +96,31 @@ def _extract_name(text: str) -> Optional[str]:
 
 def collect_facts(history: List[Dict], current_text: str = "") -> Dict[str, str]:
     """Percorre o histórico user→ai e extrai factos persistentes.
-    Returns dict com chaves: users, sector, name, email, phone (todas opcionais)."""
+    Returns dict com chaves: users, sector, name, email, phone (todas opcionais)
+    + flags de conversação: pricing_shown, demo_link_shared (evita repetição)."""
     facts: Dict[str, str] = {}
     user_texts: List[str] = []
+    ai_texts: List[str] = []
     for m in history or []:
         if m.get("sender") == "user" and m.get("text"):
             user_texts.append(m["text"])
+        elif m.get("sender") == "ai" and m.get("text"):
+            ai_texts.append(m["text"])
     if current_text:
         user_texts.append(current_text)
+
+    # === Conversational flags (anti-repetition) ===
+    # Já apresentámos os planos? Se sim, NÃO voltar a listar.
+    for t in ai_texts:
+        tl = t.lower()
+        if ("starter" in tl and "€49" in t) or ("📦 planos" in tl) or ("pro €74" in tl):
+            facts["pricing_shown"] = "yes"
+            break
+    # Já partilhámos o link de agendamento?
+    for t in ai_texts:
+        if "consenso-shop.eu/marcar-reuniao" in t:
+            facts["demo_link_shared"] = "yes"
+            break
 
     # Pergunta de utilizadores foi colocada pela AI?
     asked_users = False
@@ -166,6 +183,16 @@ def format_facts_pt(facts: Dict[str, str]) -> str:
     if "users" in facts:   lines.append(f"- Nº de utilizadores: {facts['users']}")
     if "email" in facts:   lines.append(f"- Email: {facts['email']}")
     if "phone" in facts:   lines.append(f"- Telefone: {facts['phone']}")
-    if not lines:
+    flags = []
+    if facts.get("pricing_shown") == "yes":
+        flags.append("- ⚠️ Planos JÁ apresentados — NÃO voltar a listar (só responder a pergunta específica)")
+    if facts.get("demo_link_shared") == "yes":
+        flags.append("- ⚠️ Link de agendamento JÁ partilhado — NÃO insistir; só repetir se o utilizador pedir")
+    if not lines and not flags:
         return ""
-    return "JÁ SABEMOS DO UTILIZADOR (não voltar a perguntar):\n" + "\n".join(lines)
+    out = []
+    if lines:
+        out.append("JÁ SABEMOS DO UTILIZADOR (não voltar a perguntar):\n" + "\n".join(lines))
+    if flags:
+        out.append("ESTADO DA CONVERSA:\n" + "\n".join(flags))
+    return "\n\n".join(out)
