@@ -6,6 +6,46 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
 
+## v3.20 (2026-02) — Regras Globais CONSENSO PLUS + Customização Total no editor de Agentes
+
+### Implementado
+**Backend — Regras globais (`/app/backend/ai/global_rules.py`)**
+- Novo módulo central com 10 regras CONSENSO PLUS aplicadas a TODOS os agentes (Maria, StayLocal, Tejo, Abby, e agentes criados pelo cliente).
+- Regras: tom PT-PT informal "tu" (nunca pt-BR), 1 mensagem por turno, sem repetir perguntas, interpretação inteligente de respostas curtas ("eu"=1 user), layout fixo de PLANOS em Markdown, 1 pergunta por turno, idioma dinâmico, follow_up vazio por defeito.
+- `orchestrator.py` injeta o bloco no `system` prompt acima do prompt específico do agente, tanto em `generate_response` como em `generate_response_stream`.
+
+**Backend — Filtro `follow_up` reforçado**
+- Expandida a lista `_BAD_GENERIC_FOLLOWUPS` (cobre "estou aqui para ajudar", "fico a aguardar", "qualquer dúvida", etc.).
+- Threshold de paráfrase reduzido de 65% → 55%.
+- Nova helper `_reply_already_has_cta`: se reply já tem `?` ou link, follow_up sem valor é cortado.
+- Follow-ups < 8 caracteres são descartados.
+- Mantida exceção: follow_up COM valor (link, contacto, "@") é sempre aceite — alinhado com a regra do utilizador "manter, mas só em casos específicos".
+
+**Backend — Customização persistente (resistente ao bootstrap)**
+- Modelos `Agent` e `AgentInput` (`models.py`) ganharam dois campos: `theme: Dict` e `is_customized: bool`.
+- `PUT /api/agents/{id}` marca automaticamente `is_customized=true` em cada update.
+- Novo endpoint **`POST /api/agents/{id}/reset-defaults`** repõe `system_prompt`+`icebreakers`+`welcome`+`theme`+`knowledge` para a versão oficial do seed e remove a flag.
+- **`bootstrap.py` agora respeita `is_customized`**: se `true`, NÃO sobrescreve campos de conteúdo no startup (preserva customizações do dashboard). Aplica-se tanto a `_ensure_agent_with_kb` como a `_ensure_abby`.
+- Inserts iniciais incluem `is_customized: False` para contrato consistente.
+
+**Frontend (`/app/frontend/src/pages/Agentes.jsx`)**
+- Nova tab **"Visual & Cores"** com 5 color pickers (primary, primary_dark, primary_soft, primary_border, bot) — duplo input (`<input type="color">` + hexcode editável) e descrição contextual de cada cor.
+- **Pré-visualização ao vivo** do widget com as cores aplicadas (header gradiente, icebreakers, bolhas bot/user com preço em destaque, botão enviar).
+- Botão **"Repor cores"** repõe o tema CONSENSO Plus (azul `#4591CE` + dourado `#E4AC1E`).
+- Tab "IA & Instruções" reorganizada: prompt do sistema com 10 linhas + nota "regras globais Consenso Plus são aplicadas por cima destas".
+- Novo painel **"Repor predefinições do seed"** no fim da tab AI — botão que chama `POST /agents/{id}/reset-defaults`, badge "Modo Customizado" visível quando `is_customized=true`.
+
+### Validação
+- ✅ **Backend testing agent**: 12/12 testes novos (`test_iter14_global_rules.py`) — 0 regressões nos 25 testes anteriores.
+- ✅ Maria respeita layout fixo de planos: "Olá, quanto custa?" → 1 mensagem com STARTER/PRO/ENTERPRISE em bullets + pergunta de qualificação, `follow_up=None`.
+- ✅ Anti-loop: "eu" → não repete perguntas nem usa "desculpa pela confusão".
+- ✅ Sector hotelaria: pergunta sobre hotel NÃO mostra property cards.
+- ✅ Multi-idioma: "Hello..." → resposta em EN, `language=en`, sem pt-BR.
+- ✅ Persistência customização: PUT → restart backend → cores e welcome customizados **preservados**.
+- ✅ Reset funcional: `POST /reset-defaults` volta às predefinições do seed.
+- ✅ Smoke test visual: tab "Visual & Cores" renderiza corretamente com pré-visualização ao vivo.
+
+
 ## v3.19.3 (2026-02) — Pre-deploy hardening de TODOS os 4 agentes
 
 ### Mudanças

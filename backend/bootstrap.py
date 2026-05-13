@@ -175,6 +175,7 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
         await db.agents.insert_one({
             "id": agent_id, "tenant_id": tenant_id,
             **content_patch,
+            "is_customized": False,
             "api_key": "",
             "tone": agent_def.get("tone", ""),
             "rules": agent_def.get("rules", ""),
@@ -290,6 +291,7 @@ async def _ensure_abby(db, tenant_id: str):
         "id": agent_id, "tenant_id": tenant_id,
         "name": "Abby — ABBI Imóveis",
         "active": True,
+        "is_customized": False,
         "avatar_url": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=200&h=200&fit=crop",
         "theme": {
             "primary": "#c9a84d", "primary_dark": "#a88838",
