@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime, timezone
 
 from auth import hash_password
+from brand import CONSENSO_THEME
 
 logger = logging.getLogger(__name__)
 
@@ -208,6 +209,7 @@ async def _ensure_abby(db, tenant_id: str):
             "📈 Imóveis para investimento",
             "📑 Que documentos preciso?",
         ],
+        "theme": CONSENSO_THEME,
         "updated_at": _now(),
     }
 
@@ -293,11 +295,7 @@ async def _ensure_abby(db, tenant_id: str):
         "active": True,
         "is_customized": False,
         "avatar_url": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=200&h=200&fit=crop",
-        "theme": {
-            "primary": "#c9a84d", "primary_dark": "#a88838",
-            "primary_soft": "#FAF4E2", "primary_border": "#E8D8A8",
-            "bot": "#4e7bfa",
-        },
+        "theme": CONSENSO_THEME,
         "welcome_message": "Olá! Como posso ajudar hoje?",
         "icebreakers": [
             "🏠 Comprar e simular prestação",

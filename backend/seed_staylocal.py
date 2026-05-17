@@ -137,13 +137,8 @@ WELCOME_MESSAGE = "Bem-vindo ao StayLocal · Welcome 🌿 Sou o teu concierge di
 AVATAR_URL = "https://images.unsplash.com/photo-1551882547-ff40c63fe5fa?w=400&h=400&fit=crop&q=80"
 
 # Premium hotel theme — deep navy + gold accent
-THEME = {
-    "primary": "#1B3A5C",         # Deep navy luxury
-    "primary_dark": "#0F2440",
-    "primary_soft": "#EAEFF5",
-    "primary_border": "#C7D2E0",
-    "bot": "#C9A875",             # Gold accent for prices/links
-}
+# Brand theme — Consenso brand colors (unified across all agents)
+from brand import CONSENSO_THEME as THEME  # noqa: E402
 
 
 async def run():

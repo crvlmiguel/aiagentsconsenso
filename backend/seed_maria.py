@@ -586,14 +586,8 @@ WELCOME_MESSAGE = "Olá! 👋 Sou a Maria, a assistente IA da Consenso Plus. Pos
 # Photo from consenso-shop.eu hero
 AVATAR_URL = "https://static-assets-v2.s3.us-east-2.amazonaws.com/uploads/1776262970630_donna-result.jpeg"
 
-# Brand theme — Consenso brand colors
-THEME = {
-    "primary": "#4591CE",         # Azul Consenso — CTA, user bubble, header
-    "primary_dark": "#2C6FA8",    # Header gradient end
-    "primary_soft": "#E8F1F9",    # Avatar bg, focus ring, soft surfaces
-    "primary_border": "#C7DDF0",  # Icebreakers border
-    "bot": "#E4AC1E",             # Amarelo Consenso — bot accent, prices, highlights
-}
+# Brand theme — Consenso brand colors (unified across all agents)
+from brand import CONSENSO_THEME as THEME  # noqa: E402
 
 
 async def run():

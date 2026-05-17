@@ -126,13 +126,8 @@ WELCOME_MESSAGE = "Olá ⛵️ Sou o Tejo Sailing AI. Pronto para descobrires Li
 AVATAR_URL = "https://images.unsplash.com/photo-1530549387789-4c1017266635?w=400&h=400&fit=crop&q=80"
 
 # Sunset over the river theme — warm orange + river blue
-THEME = {
-    "primary": "#D97543",         # Sunset orange
-    "primary_dark": "#A24F26",
-    "primary_soft": "#FCEFE6",
-    "primary_border": "#F4D2BD",
-    "bot": "#2980B9",             # River blue accent
-}
+# Brand theme — Consenso brand colors (unified across all agents)
+from brand import CONSENSO_THEME as THEME  # noqa: E402
 
 
 async def run():

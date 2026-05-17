@@ -449,6 +449,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
             }
         if "abby" in name_low or "abbi" in name_low:
             # Abby tem prompt inline no bootstrap; reset volta às icebreakers/welcome bootstrap.
+            from brand import CONSENSO_THEME
             return {
                 "welcome_message": "Olá! 👋 Sou a Abby da ABBI Imóveis. Posso ajudar-te a encontrar a casa certa, simular crédito ou marcar visitas.",
                 "icebreakers": [
@@ -457,11 +458,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
                     "📈 Imóveis para investimento",
                     "📑 Que documentos preciso?",
                 ],
-                "theme": {
-                    "primary": "#c9a84d", "primary_dark": "#a88838",
-                    "primary_soft": "#FAF4E2", "primary_border": "#E8D8A8",
-                    "bot": "#4e7bfa",
-                },
+                "theme": CONSENSO_THEME,
             }
     except Exception as e:
         logger.warning(f"seed_patch_for_agent failed for '{agent_name}': {e}")

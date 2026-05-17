@@ -122,12 +122,26 @@ def collect_facts(history: List[Dict], current_text: str = "") -> Dict[str, str]
             facts["demo_link_shared"] = "yes"
             break
 
-    # Pergunta de utilizadores foi colocada pela AI?
+    # Pergunta de utilizadores/equipa foi colocada pela AI?
+    # Lista alargada para cobrir TODAS as variações naturais que a Maria/agentes
+    # podem usar quando perguntam sobre dimensão da equipa.
     asked_users = False
+    _USER_QUESTION_KEYWORDS = (
+        "quantos utilizadores", "quantos usuarios", "quantos colaboradores",
+        "quantos agentes", "quantas pessoas", "quantos sao", "quantos são",
+        "tamanho da equipa", "tamanho da tua", "tamanho da sua",
+        "elementos na equipa", "elementos da equipa",
+        "sois quantos", "são quantos",
+        "sozinho ou com", "sozinha ou com",
+        "tu sozinho", "tu sozinha", "trabalhas sozinho", "trabalhas sozinha",
+        "equipa pequena", "equipa grande",
+        "número de utilizadores", "numero de utilizadores",
+        "quantos vão usar", "quantos vao usar",
+    )
     for m in history or []:
         if m.get("sender") == "ai":
             t = (m.get("text") or "").lower()
-            if any(k in t for k in ("quantos utilizadores", "tamanho da", "tamanho da tua", "tamanho da sua", "elementos na equipa", "tamanho da equipa")):
+            if any(k in t for k in _USER_QUESTION_KEYWORDS):
                 asked_users = True
                 break
 
