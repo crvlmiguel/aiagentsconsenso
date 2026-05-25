@@ -6,6 +6,35 @@ Sistema SaaS multi-tenant PT-PT onde cada negócio cria agentes IA independentes
 **Domínio oficial**: `consenso-agents.com`
 **Site comercial**: `consenso-shop.eu`
 
+## v3.21 (2026-02/05) — Verificação Final + Tema Unificado + Novo Agente ImmoAI
+
+### Tema CONSENSO unificado em TODOS os agentes
+- Novo módulo **`/app/backend/brand.py`** — `CONSENSO_THEME` (primary `#4591CE`, primary_dark `#2C6FA8`, primary_soft `#E8F1F9`, primary_border `#C7DDF0`, bot `#E4AC1E`).
+- `seed_maria.py`, `seed_staylocal.py`, `seed_tejo_sailing.py`, `seed_immoai.py` e `bootstrap.py` (Abby) agora importam de `brand.CONSENSO_THEME` — fonte única de verdade.
+- Os 5 agentes seedados partilham agora identidade visual base; clientes podem ainda customizar cada agente via dashboard (tab "Visual & Cores") com ajustes de contraste/acessibilidade.
+
+### Reforço conversacional (Maria + todos os agentes)
+- `ai/global_rules.py` regra #2 alargada: interpretação inteligente de respostas curtas ("eu"/"1"/"um" = 1 utilizador, "nós" = 2-5, "sim/ok/claro" = confirmação positiva, frases incompletas = inferir contexto e avançar).
+- Regra #4 alargada: ZERO loops, NUNCA reiniciar fluxos, NUNCA pedir clarificação sobre input parcial — escolher a interpretação mais provável e avançar.
+- `ai/memory.py` `_USER_QUESTION_KEYWORDS` expandido (cobre "sois quantos", "trabalhas sozinho", "elementos da equipa", etc.) para capturar todas as variações naturais quando o agente perguntou sobre dimensão da equipa.
+
+### Novo agente: ImmoAI — Consultor Imobiliário Digital
+- **`/app/backend/seed_immoai.py`** (novo) — agente human-like que simula um consultor imobiliário experiente.
+- 5 imóveis demo: T2 Benfica €285k · T3 Parque Nações €520k · T4 Cascais €950k · T1 Porto €210k · T3 Almada €330k.
+- 6 icebreakers ("Estou à procura de casa", "Quero vender", "Que imóveis tens?", "Agendar visita", "Boas opções em Lisboa", "Falar com consultor").
+- SYSTEM_PROMPT define expressões humanas obrigatórias ("Perfeito 😊", "Boa", "Excelente escolha") e proíbe frases robóticas ("Como assistente virtual", "Sou um chatbot").
+- Fluxo conversacional comprar/vender/visita com filtro de orçamento (validação real: pedido "T2/T3 até 350k" → exclui corretamente €520k e €950k, mostra Benfica €285k + Almada €330k).
+- Suporte completo a `reset-defaults` e à flag `is_customized`.
+
+### Outras melhorias
+- `AgentInput.notify_email` e `AgentInput.email` agora `Optional` — permite clientes fazer PUT com payload de GET sem coercion manual.
+
+### Validação
+- ✅ **Backend testing agent**: 14/14 novos testes passaram + 37/37 regressões (51/51 total) · 0 failures.
+- ✅ Validação end-to-end: ImmoAI guia o utilizador desde "estou à procura de casa" até "marca-me visita ao primeiro" em 5 turnos, com cards filtrados, tom humano e CTA em cada resposta.
+- ✅ Maria: "Olá quanto custa?" → "eu" → STARTER recomendado sem repetir perguntas; "sim" → link de demo partilhado naturalmente.
+
+
 ## v3.20 (2026-02) — Regras Globais CONSENSO PLUS + Customização Total no editor de Agentes
 
 ### Implementado

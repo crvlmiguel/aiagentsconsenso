@@ -104,9 +104,9 @@ class AgentInput(BaseModel):
     knowledge: str = ""
     data_source_ids: List[str] = Field(default_factory=list)
     default_language: str = "pt"
-    notify_email: str = ""
+    notify_email: Optional[str] = ""
     channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
-    email: Dict[str, Any] = Field(default_factory=dict)
+    email: Optional[Dict[str, Any]] = Field(default_factory=dict)
     theme: Dict[str, Any] = Field(default_factory=dict)
     active: bool = True
 
