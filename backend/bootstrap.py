@@ -368,6 +368,16 @@ async def bootstrap(db):
             THEME as TJ_THEME,
             KNOWLEDGE_CHUNKS as TJ_KB,
         )
+        from seed_immoai import (
+            AGENT_NAME as IMMO_NAME,
+            SYSTEM_PROMPT as IMMO_PROMPT,
+            ICEBREAKERS as IMMO_ICE,
+            WELCOME_MESSAGE as IMMO_WELCOME,
+            AVATAR_URL as IMMO_AVATAR,
+            THEME as IMMO_THEME,
+            KNOWLEDGE_CHUNKS as IMMO_KB,
+            DEMO_PROPERTIES as IMMO_DEMO,
+        )
 
         await _ensure_agent_with_kb(db, tenant_id, {
             "name": MARIA_NAME,
@@ -398,6 +408,16 @@ async def bootstrap(db):
             "avatar_url": TJ_AVATAR, "theme": TJ_THEME,
             "kb_name": "Tejo Sunset Sailing — Experiências",
         }, TJ_KB)
+
+        await _ensure_agent_with_kb(db, tenant_id, {
+            "name": IMMO_NAME,
+            "role": "Consultor imobiliário digital premium",
+            "goal": "Atuar como consultor imobiliário humano — apresentar imóveis, qualificar clientes e marcar visitas.",
+            "system_prompt": IMMO_PROMPT,
+            "icebreakers": IMMO_ICE, "welcome_message": IMMO_WELCOME,
+            "avatar_url": IMMO_AVATAR, "theme": IMMO_THEME,
+            "kb_name": "ImmoAI — Catálogo Premium",
+        }, IMMO_KB, demo_items=IMMO_DEMO)
 
         # Note: Abby (ABBI Imóveis) — full 9-property catalogue auto-provisioned.
         await _ensure_abby(db, tenant_id)

@@ -447,6 +447,17 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
                 "theme": THEME,
                 "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
             }
+        if "immoai" in name_low or "immo ai" in name_low:
+            from seed_immoai import (
+                SYSTEM_PROMPT, ICEBREAKERS, WELCOME_MESSAGE, AVATAR_URL, THEME,
+                KNOWLEDGE_CHUNKS,
+            )
+            return {
+                "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
+                "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
+                "theme": THEME,
+                "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
+            }
         if "abby" in name_low or "abbi" in name_low:
             # Abby tem prompt inline no bootstrap; reset volta às icebreakers/welcome bootstrap.
             from brand import CONSENSO_THEME
