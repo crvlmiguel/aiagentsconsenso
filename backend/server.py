@@ -481,6 +481,49 @@ async def list_agents(claims=Depends(current_user)):
     return await db.agents.find({"tenant_id": claims["tenant_id"]}, {"_id": 0}).to_list(200)
 
 
+@api.get("/admin/agents-status")
+async def admin_agents_status():
+    """Endpoint público de diagnóstico — lista resumo dos agentes seedados.
+    Útil para verificar pós-deploy se o bootstrap correu e quais agentes existem.
+    NÃO devolve prompts, chaves ou conteúdos sensíveis — apenas metadados públicos."""
+    # Detect which seed files are importable (to diagnose missing files in deploys)
+    seed_modules = {}
+    for mod_name, label in [
+        ("seed_maria", "Maria"),
+        ("seed_staylocal", "StayLocal"),
+        ("seed_tejo_sailing", "Tejo Sunset Sailing"),
+        ("seed_immoai", "ImmoAI"),
+        ("brand", "brand"),
+    ]:
+        try:
+            __import__(mod_name)
+            seed_modules[mod_name] = "✅ importable"
+        except Exception as e:
+            seed_modules[mod_name] = f"❌ {type(e).__name__}: {e}"
+
+    # List all agents (across tenants — public diag only shows counts + names)
+    out = []
+    async for a in db.agents.find({}, {"_id": 0}):
+        out.append({
+            "name": a.get("name"),
+            "active": a.get("active", False),
+            "is_customized": a.get("is_customized", False),
+            "system_prompt_len": len(a.get("system_prompt") or ""),
+            "icebreakers_count": len(a.get("icebreakers") or []),
+            "data_source_ids_count": len(a.get("data_source_ids") or []),
+            "theme_primary": (a.get("theme") or {}).get("primary"),
+            "theme_bot": (a.get("theme") or {}).get("bot"),
+            "tenant_id_short": (a.get("tenant_id") or "")[:8],
+            "id_short": (a.get("id") or "")[:8],
+        })
+
+    return {
+        "total_agents": len(out),
+        "seed_modules": seed_modules,
+        "agents": out,
+    }
+
+
 @api.post("/agents")
 async def create_agent(inp: AgentInput, claims=Depends(current_user)):
     agent = Agent(tenant_id=claims["tenant_id"], **inp.model_dump())

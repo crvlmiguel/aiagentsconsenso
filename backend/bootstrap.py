@@ -334,51 +334,39 @@ async def _ensure_abby(db, tenant_id: str):
     logger.info(f"[bootstrap] created agent 'Abby — ABBI Imóveis' with {len(PROPERTIES)} properties")
 
 
+async def _safe_seed(label: str, fn):
+    """Wrap each agent's seed call so that a failure in ONE agent doesn't
+    sink the bootstrap for the others. Logs clearly which agent failed and why."""
+    try:
+        logger.info(f"[bootstrap] seeding {label}…")
+        await fn()
+        logger.info(f"[bootstrap] ✅ {label} done")
+    except ImportError as e:
+        logger.error(f"[bootstrap] ❌ {label} ImportError: {e} — file missing in this build?")
+    except Exception as e:
+        logger.error(f"[bootstrap] ❌ {label} failed: {e}", exc_info=True)
+
+
 async def bootstrap(db):
-    """Called once at backend startup. Idempotent — safe to re-run."""
+    """Called once at backend startup. Idempotent — safe to re-run.
+    Each agent is wrapped in its own _safe_seed so a single failure does
+    NOT prevent the other agents from being provisioned."""
     try:
         tenant_id = await _ensure_admin(db)
+    except Exception as e:
+        logger.error(f"[bootstrap] could not ensure admin user: {e}", exc_info=True)
+        return
 
-        # Lazy imports of seed defs (kept in seed_*.py for separation of concerns)
+    logger.info(f"[bootstrap] starting agent provisioning for tenant {tenant_id[:8]}…")
+
+    # ------- Maria -------
+    async def _seed_maria():
         from seed_maria import (
-            AGENT_NAME as MARIA_NAME,
-            SYSTEM_PROMPT as MARIA_PROMPT,
-            ICEBREAKERS as MARIA_ICE,
-            WELCOME_MESSAGE as MARIA_WELCOME,
-            AVATAR_URL as MARIA_AVATAR,
-            THEME as MARIA_THEME,
-            KNOWLEDGE_CHUNKS as MARIA_KB,
-            DEMO_PROPERTIES as MARIA_DEMO,
+            AGENT_NAME as MARIA_NAME, SYSTEM_PROMPT as MARIA_PROMPT,
+            ICEBREAKERS as MARIA_ICE, WELCOME_MESSAGE as MARIA_WELCOME,
+            AVATAR_URL as MARIA_AVATAR, THEME as MARIA_THEME,
+            KNOWLEDGE_CHUNKS as MARIA_KB, DEMO_PROPERTIES as MARIA_DEMO,
         )
-        from seed_staylocal import (
-            AGENT_NAME as SL_NAME,
-            SYSTEM_PROMPT as SL_PROMPT,
-            ICEBREAKERS as SL_ICE,
-            WELCOME_MESSAGE as SL_WELCOME,
-            AVATAR_URL as SL_AVATAR,
-            THEME as SL_THEME,
-            KNOWLEDGE_CHUNKS as SL_KB,
-        )
-        from seed_tejo_sailing import (
-            AGENT_NAME as TJ_NAME,
-            SYSTEM_PROMPT as TJ_PROMPT,
-            ICEBREAKERS as TJ_ICE,
-            WELCOME_MESSAGE as TJ_WELCOME,
-            AVATAR_URL as TJ_AVATAR,
-            THEME as TJ_THEME,
-            KNOWLEDGE_CHUNKS as TJ_KB,
-        )
-        from seed_immoai import (
-            AGENT_NAME as IMMO_NAME,
-            SYSTEM_PROMPT as IMMO_PROMPT,
-            ICEBREAKERS as IMMO_ICE,
-            WELCOME_MESSAGE as IMMO_WELCOME,
-            AVATAR_URL as IMMO_AVATAR,
-            THEME as IMMO_THEME,
-            KNOWLEDGE_CHUNKS as IMMO_KB,
-            DEMO_PROPERTIES as IMMO_DEMO,
-        )
-
         await _ensure_agent_with_kb(db, tenant_id, {
             "name": MARIA_NAME,
             "role": "Assistente IA principal da Consenso Plus — multissetorial (Imobiliário, Hotelaria, Turismo, Empresas de Serviços)",
@@ -388,7 +376,15 @@ async def bootstrap(db):
             "avatar_url": MARIA_AVATAR, "theme": MARIA_THEME,
             "kb_name": "Site Consenso", "kb_url": "https://consenso-shop.eu",
         }, MARIA_KB, demo_items=MARIA_DEMO)
+    await _safe_seed("Maria — Assistente IA Consenso Plus", _seed_maria)
 
+    # ------- StayLocal -------
+    async def _seed_staylocal():
+        from seed_staylocal import (
+            SYSTEM_PROMPT as SL_PROMPT, ICEBREAKERS as SL_ICE,
+            WELCOME_MESSAGE as SL_WELCOME, AVATAR_URL as SL_AVATAR,
+            THEME as SL_THEME, KNOWLEDGE_CHUNKS as SL_KB,
+        )
         await _ensure_agent_with_kb(db, tenant_id, {
             "name": "StayLocal Concierge AI",
             "role": "Concierge digital de hotel premium",
@@ -398,7 +394,15 @@ async def bootstrap(db):
             "avatar_url": SL_AVATAR, "theme": SL_THEME,
             "kb_name": "Conceito StayLocal",
         }, SL_KB)
+    await _safe_seed("StayLocal Concierge AI", _seed_staylocal)
 
+    # ------- Tejo Sailing -------
+    async def _seed_tejo():
+        from seed_tejo_sailing import (
+            SYSTEM_PROMPT as TJ_PROMPT, ICEBREAKERS as TJ_ICE,
+            WELCOME_MESSAGE as TJ_WELCOME, AVATAR_URL as TJ_AVATAR,
+            THEME as TJ_THEME, KNOWLEDGE_CHUNKS as TJ_KB,
+        )
         await _ensure_agent_with_kb(db, tenant_id, {
             "name": "Tejo Sunset Sailing AI Guide",
             "role": "Concierge de luxo turístico",
@@ -408,18 +412,28 @@ async def bootstrap(db):
             "avatar_url": TJ_AVATAR, "theme": TJ_THEME,
             "kb_name": "Tejo Sunset Sailing — Experiências",
         }, TJ_KB)
+    await _safe_seed("Tejo Sunset Sailing AI Guide", _seed_tejo)
 
+    # ------- ImmoAI -------
+    async def _seed_immoai():
+        from seed_immoai import (
+            AGENT_NAME as IMMO_NAME, SYSTEM_PROMPT as IMMO_PROMPT,
+            ICEBREAKERS as IMMO_ICE, WELCOME_MESSAGE as IMMO_WELCOME,
+            AVATAR_URL as IMMO_AVATAR, THEME as IMMO_THEME,
+            KNOWLEDGE_CHUNKS as IMMO_KB, DEMO_PROPERTIES as IMMO_DEMO,
+        )
         await _ensure_agent_with_kb(db, tenant_id, {
             "name": IMMO_NAME,
-            "role": "Consultor imobiliário digital premium",
-            "goal": "Atuar como consultor imobiliário humano — apresentar imóveis, qualificar clientes e marcar visitas.",
+            "role": "Consultor imobiliário digital — DEMO sandbox para imobiliárias testarem o sistema",
+            "goal": "Simular atendimento imobiliário real — apresentar imóveis demo, qualificar e marcar visitas. Servir como demo da Consenso Plus para imobiliárias.",
             "system_prompt": IMMO_PROMPT,
             "icebreakers": IMMO_ICE, "welcome_message": IMMO_WELCOME,
             "avatar_url": IMMO_AVATAR, "theme": IMMO_THEME,
             "kb_name": "ImmoAI — Catálogo Premium",
         }, IMMO_KB, demo_items=IMMO_DEMO)
+    await _safe_seed("ImmoAI — Consultor Imobiliário Digital", _seed_immoai)
 
-        # Note: Abby (ABBI Imóveis) — full 9-property catalogue auto-provisioned.
-        await _ensure_abby(db, tenant_id)
-    except Exception as e:
-        logger.error(f"[bootstrap] failed: {e}", exc_info=True)
+    # ------- Abby (ABBI Imóveis) — full 9-property catalogue -------
+    await _safe_seed("Abby — ABBI Imóveis", lambda: _ensure_abby(db, tenant_id))
+
+    logger.info("[bootstrap] all agent seeding complete")
