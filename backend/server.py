@@ -289,24 +289,28 @@ async def agent_analytics(agent_id: str, days: int = 30, claims=Depends(current_
     leads_q = {"tenant_id": tid, "agent_id": agent_id, "created_at": {"$gte": cutoff}}
     leads_total = await db.leads.count_documents(leads_q)
 
-    # Messages — joined via conversation_id
-    convo_ids = [c["id"] async for c in db.conversations.find(convo_q, {"id": 1, "_id": 0})]
+    # Messages — joined via conversation_id (limited to last 5000 convos to avoid OOM)
+    convo_ids = [c["id"] async for c in db.conversations.find(convo_q, {"id": 1, "_id": 0}).limit(5000)]
     msg_q = {"conversation_id": {"$in": convo_ids}} if convo_ids else {"conversation_id": "__none__"}
     messages_total = await db.messages.count_documents(msg_q)
 
     conversion_rate = round((leads_total / convos_total) * 100, 1) if convos_total else 0.0
 
-    # ---- Daily breakdown (conversations + leads)
-    def _day(iso: str) -> str:
-        return (iso or "")[:10]
+    # ---- Daily breakdown (conversations + leads) — via aggregation pipeline ($group server-side)
     daily_convos = {}
-    async for c in db.conversations.find(convo_q, {"created_at": 1, "_id": 0}):
-        d = _day(c.get("created_at", ""))
-        if d: daily_convos[d] = daily_convos.get(d, 0) + 1
+    async for r in db.conversations.aggregate([
+        {"$match": convo_q},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "n": {"$sum": 1}}},
+    ]):
+        if r["_id"]:
+            daily_convos[r["_id"]] = r["n"]
     daily_leads = {}
-    async for l in db.leads.find(leads_q, {"created_at": 1, "_id": 0}):
-        d = _day(l.get("created_at", ""))
-        if d: daily_leads[d] = daily_leads.get(d, 0) + 1
+    async for r in db.leads.aggregate([
+        {"$match": leads_q},
+        {"$group": {"_id": {"$substr": ["$created_at", 0, 10]}, "n": {"$sum": 1}}},
+    ]):
+        if r["_id"]:
+            daily_leads[r["_id"]] = r["n"]
     # Fill missing days
     today = datetime.now(timezone.utc).date()
     daily_series = []
@@ -318,9 +322,11 @@ async def agent_analytics(agent_id: str, days: int = 30, claims=Depends(current_
             "leads": daily_leads.get(d, 0),
         })
 
-    # ---- Qualification breakdown (uses convo.qualification.status / .tags)
+    # ---- Qualification breakdown — via aggregation pipeline
     qual = {"quente": 0, "morno": 0, "frio": 0, "outros": 0}
-    async for c in db.conversations.find(convo_q, {"qualification": 1, "tags": 1, "_id": 0}):
+    async for c in db.conversations.find(
+        convo_q, {"qualification": 1, "tags": 1, "_id": 0}
+    ).limit(2000):
         q = (c.get("qualification") or {})
         status = (q.get("status") or "").lower()
         tags = [t.lower() for t in (c.get("tags") or [])]
@@ -818,7 +824,8 @@ async def add_url_source(inp: DataSourceURLInput, claims=Depends(current_user)):
     await db.data_sources.insert_one(doc.copy())
 
     try:
-        scraped = scrape_url(inp.url)
+        # scrape_url is sync — run in thread pool to avoid blocking event loop
+        scraped = await asyncio.to_thread(scrape_url, inp.url)
         chunks = build_chunks(src_id, claims["tenant_id"], scraped["title"], scraped["text"], scraped["items"])
         if chunks:
             await db.data_chunks.insert_many([c.copy() for c in chunks])
@@ -910,7 +917,8 @@ async def reindex_source(src_id: str, claims=Depends(current_user)):
     await db.data_chunks.delete_many({"source_id": src_id})
     if src["kind"] == "url" and src.get("url"):
         try:
-            scraped = scrape_url(src["url"])
+            # scrape_url is sync — run in thread pool to avoid blocking event loop
+            scraped = await asyncio.to_thread(scrape_url, src["url"])
             chunks = build_chunks(src_id, claims["tenant_id"], scraped["title"], scraped["text"], scraped["items"])
             if chunks:
                 await db.data_chunks.insert_many([c.copy() for c in chunks])
@@ -2340,6 +2348,33 @@ async def _startup_bootstrap():
     Idempotent — does nothing if data already exists."""
     from bootstrap import bootstrap
     await bootstrap(db)
+
+
+@app.on_event("startup")
+async def _startup_create_indexes():
+    """Cria índices MongoDB críticos. Idempotente — `create_index` é no-op se
+    o índice já existir. Reduz latência em queries de produção de O(N) para O(log N)."""
+    try:
+        # Conversations — filtros mais comuns: por tenant+agent+data, por external_user_id
+        await db.conversations.create_index([("tenant_id", 1), ("agent_id", 1), ("created_at", -1)])
+        await db.conversations.create_index([("tenant_id", 1), ("external_user_id", 1), ("agent_id", 1)])
+        await db.conversations.create_index([("id", 1)], unique=True)
+        # Messages — quase sempre filtrado por conversation_id
+        await db.messages.create_index([("conversation_id", 1), ("created_at", 1)])
+        # Leads — tenant+agent+data
+        await db.leads.create_index([("tenant_id", 1), ("agent_id", 1), ("created_at", -1)])
+        await db.leads.create_index([("conversation_id", 1)])
+        # Agents — get por tenant+id
+        await db.agents.create_index([("tenant_id", 1), ("id", 1)])
+        await db.agents.create_index([("id", 1)], unique=True)
+        # Data chunks — filtrado por source_id e tenant
+        await db.data_chunks.create_index([("source_id", 1), ("kind", 1)])
+        await db.data_chunks.create_index([("tenant_id", 1)])
+        # Users — lookup por email
+        await db.users.create_index([("email", 1)], unique=True)
+        logger.info("[startup] ✅ MongoDB indexes ensured")
+    except Exception as e:
+        logger.error(f"[startup] index creation failed: {e}")
 
 
 @app.on_event("startup")
