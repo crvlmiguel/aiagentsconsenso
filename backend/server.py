@@ -644,12 +644,16 @@ async def duplicate_and_translate_agent(
         raise HTTPException(404, "Agente não encontrado")
 
     # Traduz primeiro o payload (em memória), depois clonamos e persistimos
+    # A tradução é uma operação INTERNA da plataforma — usa SEMPRE a chave
+    # Emergent (independente da configuração do agente). Isto garante que:
+    #   - agentes sem chave própria conseguem traduzir
+    #   - chaves de utilizador inválidas/expiradas não bloqueiam a feature
     try:
         translated = await translate_agent_payload(
             agent, target_lang=target,
             source_lang=agent.get("default_language") or "pt",
-            api_provider=agent.get("api_provider") or "emergent",
-            api_key=agent.get("api_key") or "",
+            api_provider="emergent",
+            api_key=None,
         )
     except Exception as e:
         logger.exception(f"translate_agent_payload failed: {e}")

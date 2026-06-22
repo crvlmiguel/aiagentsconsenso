@@ -69,7 +69,9 @@ async def translate_text(
     api_key: Optional[str] = None,
 ) -> str:
     """Translate a single piece of text. Returns the translated text.
-    Empty/short inputs are returned as-is."""
+    Empty/short inputs are returned as-is.
+    Force-uses Emergent key (ignores agent BYO keys to avoid platform feature
+    breaking due to invalid/expired user keys)."""
     if not text or not isinstance(text, str):
         return text or ""
     if target_lang == source_lang:
@@ -81,23 +83,30 @@ async def translate_text(
         raise ValueError(f"Idioma de destino não suportado: {target_lang}")
 
     session = f"translate-{uuid.uuid4().hex[:12]}"
-    try:
-        out = await llm_complete(
-            system_message=_TRANSLATION_SYSTEM,
-            user_text=_user_prompt(text, target_lang),
-            session_id=session,
-            task="fast",
-            api_provider=api_provider,
-            api_key=api_key,
-        )
-        # Strip occasional wrapping quotes the model may add
-        cleaned = (out or "").strip()
-        if cleaned.startswith('"') and cleaned.endswith('"') and cleaned.count('"') == 2:
-            cleaned = cleaned[1:-1]
-        return cleaned or text
-    except Exception as e:
-        logger.warning(f"translate_text failed ({target_lang}): {e}")
-        return text  # fallback to original on failure
+    last_err: Optional[Exception] = None
+    # 1 retry with backoff on transient LLM failures (rate-limit / 5xx)
+    for attempt in range(2):
+        try:
+            out = await llm_complete(
+                system_message=_TRANSLATION_SYSTEM,
+                user_text=_user_prompt(text, target_lang),
+                session_id=session,
+                task="fast",
+                api_provider="emergent",   # always platform key for internal feature
+                api_key=None,
+            )
+            cleaned = (out or "").strip()
+            # Strip occasional wrapping quotes the model may add
+            if cleaned.startswith('"') and cleaned.endswith('"') and cleaned.count('"') == 2:
+                cleaned = cleaned[1:-1]
+            return cleaned or text
+        except Exception as e:
+            last_err = e
+            logger.warning(f"translate_text attempt {attempt+1} failed ({target_lang}): {e}")
+            if attempt == 0:
+                await asyncio.sleep(1.2)  # brief backoff before retry
+    # Both attempts failed — re-raise so caller endpoint surfaces an honest error
+    raise RuntimeError(f"LLM falhou após 2 tentativas: {str(last_err)[:200]}")
 
 
 # Campos do agente que devem ser traduzidos.
@@ -131,21 +140,28 @@ async def translate_agent_payload(
     api_provider: str = "emergent", api_key: Optional[str] = None,
 ) -> Dict:
     """Returns a NEW dict with translated fields. Preserved fields are kept verbatim.
-    `default_language` is updated to the target language."""
+    `default_language` is updated to the target language.
+    Resilient: if a single field translation fails, keeps the original (logged warning).
+    Only raises if the LLM is fundamentally broken (e.g. no API key, all fields fail)."""
     if target_lang not in SUPPORTED_LANGUAGES:
         raise ValueError(f"Idioma de destino não suportado: {target_lang}")
 
     out = dict(agent)  # shallow copy
     src = source_lang or agent.get("default_language") or "pt"
+    if target_lang == src:
+        out["default_language"] = target_lang
+        return out
 
     # Translate each text field in parallel for speed
-    text_tasks = {
-        f: translate_text(out.get(f) or "", target_lang, src, api_provider, api_key)
-        for f in TRANSLATABLE_TEXT_FIELDS
-        if (out.get(f) or "").strip()
-    }
+    text_field_names: List[str] = [
+        f for f in TRANSLATABLE_TEXT_FIELDS if (out.get(f) or "").strip()
+    ]
+    text_tasks = [
+        translate_text(out.get(f) or "", target_lang, src, api_provider, api_key)
+        for f in text_field_names
+    ]
     # List fields — translate each item
-    list_tasks = {}
+    list_tasks: Dict[str, List] = {}
     for lf in TRANSLATABLE_LIST_FIELDS:
         items = out.get(lf) or []
         list_tasks[lf] = [
@@ -154,14 +170,44 @@ async def translate_agent_payload(
         ]
 
     # Execute all translations in parallel
+    text_results: List = []
     if text_tasks:
-        text_results = await asyncio.gather(*text_tasks.values(), return_exceptions=False)
-        for field, result in zip(text_tasks.keys(), text_results):
-            out[field] = result
+        text_results = await asyncio.gather(*text_tasks, return_exceptions=True)
+    list_results: Dict[str, List] = {}
     for lf, tasks in list_tasks.items():
         if tasks:
-            results = await asyncio.gather(*tasks, return_exceptions=False)
-            out[lf] = list(results)
+            list_results[lf] = await asyncio.gather(*tasks, return_exceptions=True)
+
+    # Count failures
+    total_attempts = len(text_results) + sum(len(v) for v in list_results.values())
+    total_failures = 0
+
+    for field, result in zip(text_field_names, text_results):
+        if isinstance(result, Exception):
+            logger.warning(f"[translate] field '{field}' failed: {result} — keeping original")
+            total_failures += 1
+            # leave out[field] as the original value (already in `out`)
+        else:
+            out[field] = result
+
+    for lf, results in list_results.items():
+        merged = []
+        original_items = out.get(lf) or []
+        for i, result in enumerate(results):
+            if isinstance(result, Exception):
+                logger.warning(f"[translate] {lf}[{i}] failed: {result} — keeping original")
+                total_failures += 1
+                merged.append(original_items[i] if i < len(original_items) else "")
+            else:
+                merged.append(result)
+        out[lf] = merged
+
+    # If everything failed → raise (LLM is fundamentally broken)
+    if total_attempts > 0 and total_failures == total_attempts:
+        raise RuntimeError(
+            "Tradução falhou em todos os campos. "
+            "Verifica se a Emergent LLM Key está válida e com créditos."
+        )
 
     out["default_language"] = target_lang
     return out
