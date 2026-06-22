@@ -575,6 +575,98 @@ async def reset_agent_defaults(agent_id: str, claims=Depends(current_user)):
     return await db.agents.find_one({"id": agent_id}, {"_id": 0})
 
 
+LANG_LABELS = {"pt": "PT", "en": "EN", "es": "ES", "fr": "FR", "de": "DE", "ca": "CA"}
+
+
+async def _clone_agent_core(agent: dict, tenant_id: str) -> dict:
+    """Builds a duplicated agent dict ready to insert. Preserves ALL non-secret
+    config (theme, icebreakers, prompt, etc.) but assigns a new id and resets
+    integration-sensitive fields (api_key, channel access tokens)."""
+    new_agent = {k: v for k, v in agent.items() if k != "_id"}
+    new_agent["id"] = new_id()
+    new_agent["tenant_id"] = tenant_id
+    new_agent["is_customized"] = True  # duplicado é sempre customizado pelo user
+    new_agent["created_at"] = datetime.now(timezone.utc).isoformat()
+    new_agent["updated_at"] = new_agent["created_at"]
+    new_agent["data_source_ids"] = []  # KB own per-agent; copy is empty by default
+    # Reset secrets — clone should never carry over API keys / channel tokens
+    new_agent["api_key"] = ""
+    channels = dict(new_agent.get("channels") or {})
+    for kind in list(channels.keys()):
+        ch = dict(channels[kind] or {})
+        for secret_field in ("access_token", "bot_token", "phone_number_id",
+                              "page_access_token", "verify_token"):
+            if secret_field in ch:
+                ch[secret_field] = ""
+        channels[kind] = ch
+    new_agent["channels"] = channels
+    return new_agent
+
+
+@api.post("/agents/{agent_id}/duplicate")
+async def duplicate_agent(agent_id: str, claims=Depends(current_user)):
+    """Duplica integralmente um agente (mesmo conteúdo, novo ID, sem chaves API)."""
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0}
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+
+    clone = await _clone_agent_core(agent, claims["tenant_id"])
+    clone["name"] = f"{agent.get('name', 'Agente')} (cópia)"
+    await db.agents.insert_one(clone)
+    return await db.agents.find_one({"id": clone["id"]}, {"_id": 0})
+
+
+@api.post("/agents/{agent_id}/duplicate-translate")
+async def duplicate_and_translate_agent(
+    agent_id: str,
+    body: dict,
+    claims=Depends(current_user),
+):
+    """Duplica + traduz TODOS os campos textuais para o idioma alvo.
+    Body: { "target_language": "en|es|fr|de|ca|pt" }"""
+    from ai.translator import translate_agent_payload, SUPPORTED_LANGUAGES
+
+    target = (body or {}).get("target_language") or ""
+    if target not in SUPPORTED_LANGUAGES:
+        raise HTTPException(400, f"Idioma de destino inválido. Suportados: {list(SUPPORTED_LANGUAGES.keys())}")
+
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0}
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+
+    # Traduz primeiro o payload (em memória), depois clonamos e persistimos
+    try:
+        translated = await translate_agent_payload(
+            agent, target_lang=target,
+            source_lang=agent.get("default_language") or "pt",
+            api_provider=agent.get("api_provider") or "emergent",
+            api_key=agent.get("api_key") or "",
+        )
+    except Exception as e:
+        logger.exception(f"translate_agent_payload failed: {e}")
+        raise HTTPException(500, f"Falha na tradução: {str(e)[:160]}")
+
+    clone = await _clone_agent_core(translated, claims["tenant_id"])
+    # Suffix do idioma no nome — fica fácil distinguir versões
+    suffix = f" {LANG_LABELS.get(target, target.upper())}"
+    base_name = translated.get("name", agent.get("name", "Agente"))
+    # Strip any previous lang-suffix to avoid "Maria EN PT"
+    for code, lab in LANG_LABELS.items():
+        if base_name.endswith(f" {lab}"):
+            base_name = base_name[: -(len(lab) + 1)]
+            break
+    clone["name"] = f"{base_name}{suffix}"
+
+    await db.agents.insert_one(clone)
+    return await db.agents.find_one({"id": clone["id"]}, {"_id": 0})
+
+
+
+
 @api.delete("/agents/{agent_id}")
 async def delete_agent(agent_id: str, claims=Depends(current_user)):
     await db.agents.delete_one({"id": agent_id, "tenant_id": claims["tenant_id"]})

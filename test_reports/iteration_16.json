@@ -1,0 +1,31 @@
+{
+  "summary": "Iter16 backend testing for Consenso Plus Duplicate & Duplicate+Translate functionality. All 11 tests passed in ~117s (login + 5 LLM-driven translations + invariant checks + cleanup). Confirmed: plain duplicate clones content with new ID, '(cópia)' suffix, is_customized=true, api_key cleared, data_source_ids=[], channel secrets stripped, theme preserved. duplicate-translate works for en/es/fr/de/ca: translates name, welcome_message, tone, goal, system_prompt, rules, knowledge, icebreakers; default_language updated; name suffixed with LANG_LABEL; brand names (Consenso Plus, ImmoAI, StayLocal, Maria, ABBI, URLs) preserved verbatim. Invalid target_language ('jp') and empty body both return 400 with clear message. DELETE on clone removes it from list and seed agents remain untouched (5/5).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter16_duplicate_translate.py",
+    "/app/test_reports/pytest/iter16_full.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py line 624: `body: dict` should be a Pydantic model (e.g. {target_language: str}) for cleaner validation, OpenAPI docs and to avoid relying on str truthiness for the 400. Current implementation works but is loose-typed.",
+    "translator.py: silently swallows exceptions per-field (returns original text on LLM failure) — partial translations may pass through unnoticed. Consider logging an aggregate warning or returning a flag so the endpoint can decide whether to fail or warn the caller.",
+    "duplicate-translate endpoint catches all Exception and returns 500 — a translator.ValueError (unsupported lang) would already be guarded earlier, but any downstream LLM transient failure (rate-limit, 5xx) is converted into 500 without a retry. Consider a single retry on llm_complete or surfacing 503/504 distinction.",
+    "_clone_agent_core strips known secret fields by name; if a new channel kind introduces a new secret-named field (e.g. 'app_secret'), it will be silently carried over. Consider an allowlist of channel fields instead of denylist."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100%", "frontend": "n/a (backend-only request)"},
+  "test_credentials": "admin@consenso-agents.com / 100%Consenso",
+  "seed_data_creation": "None — used smallest existing seed agent (Abby — ABBI Imóveis, 785 chars system_prompt) to minimize LLM time. All clones deleted in fixture teardown.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter16 covered POST /api/agents/{id}/duplicate and POST /api/agents/{id}/duplicate-translate for 6 languages (pt/en/es/fr/de/ca via 5 actual LLM runs — pt skipped as no-op). Total LLM time ~115s. Seed agent count must stay = 5 (Abby, Maria, ImmoAI, Tejo, StayLocal). Test selects the smallest-prompt agent automatically. Cleanup fixture re-authenticates and bulk-deletes clones. Tests run via: pytest backend/tests/test_iter16_duplicate_translate.py -v. If extending, watch out for rate-limits on parallel translation tasks (asyncio.gather in translator.py executes 7 text fields + N icebreakers concurrently per language).",
+  "rca of the issue": "N/A — no bugs found."
+}

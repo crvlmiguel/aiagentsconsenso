@@ -7,6 +7,7 @@ import {
   Bot, Trash2, Plus, Save, Sparkles, Database,
   KeyRound, CheckCircle2, AlertTriangle, MessageSquare, Send, X,
   Mail, Copy, Globe, Phone, Code2, Eye, Zap, Instagram, Palette, RotateCcw,
+  Languages, Loader2,
 } from "lucide-react";
 
 const defaultAgent = {
@@ -206,6 +207,47 @@ const Agentes = () => {
     }
   };
 
+  // ===== Duplicate + Translate =====
+  const [translateOpen, setTranslateOpen] = useState(false);
+  const [translateTarget, setTranslateTarget] = useState("en");
+  const [translateBusy, setTranslateBusy] = useState(false);
+  const [duplicateBusy, setDuplicateBusy] = useState(false);
+
+  const duplicatePlain = async () => {
+    if (!selected?.id) { toast.error("Guarde o agente antes de duplicar."); return; }
+    setDuplicateBusy(true);
+    try {
+      const { data } = await api.post(`/agents/${selected.id}/duplicate`);
+      toast.success(`Agente duplicado: ${data.name}`);
+      await load();
+      setSelected(data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Falha a duplicar");
+    } finally {
+      setDuplicateBusy(false);
+    }
+  };
+
+  const duplicateTranslate = async () => {
+    if (!selected?.id) { toast.error("Guarde o agente antes de traduzir."); return; }
+    if (!translateTarget) { toast.error("Escolha o idioma de destino."); return; }
+    setTranslateBusy(true);
+    try {
+      const { data } = await api.post(
+        `/agents/${selected.id}/duplicate-translate`,
+        { target_language: translateTarget },
+      );
+      toast.success(`Agente criado: ${data.name}`, { duration: 5000 });
+      setTranslateOpen(false);
+      await load();
+      setSelected(data);
+    } catch (e) {
+      toast.error(e?.response?.data?.detail || "Falha na tradução");
+    } finally {
+      setTranslateBusy(false);
+    }
+  };
+
   const addIce = () => update("icebreakers", [...(selected.icebreakers || []), ""]);
   const updIce = (i, v) => {
     const ices = [...(selected.icebreakers || [])];
@@ -297,7 +339,21 @@ const Agentes = () => {
                 <input data-testid="agent-name" value={selected.name} onChange={(e) => update("name", e.target.value)}
                   className="font-display text-3xl font-bold bg-transparent border-b-2 border-transparent focus:border-[#0069FE] outline-none" />
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 flex-wrap">
+                {selected.id && (
+                  <button data-testid="btn-duplicate-agent" onClick={duplicatePlain} disabled={duplicateBusy}
+                    className="btn-ghost text-[13px]" title="Duplicar este agente (mesmo conteúdo, novo ID)">
+                    {duplicateBusy ? <Loader2 size={13} className="animate-spin" /> : <Copy size={13} />}
+                    Duplicar
+                  </button>
+                )}
+                {selected.id && (
+                  <button data-testid="btn-translate-agent" onClick={() => setTranslateOpen(true)}
+                    className="btn-ghost text-[13px] text-[#0069FE] border border-[#C7DDF0] hover:bg-[#E8F1F9]"
+                    title="Duplica e traduz automaticamente todos os textos para outro idioma">
+                    <Languages size={13} /> Duplicar e Traduzir
+                  </button>
+                )}
                 {selected.id && <button data-testid="btn-delete-agent" onClick={del} className="btn-ghost text-[13px] hover:text-[#DC2626]"><Trash2 size={13} /> Eliminar</button>}
                 <button data-testid="btn-save-agent" onClick={save} className="btn-primary"><Save size={13} /> Guardar</button>
               </div>
@@ -1106,6 +1162,79 @@ const Agentes = () => {
           </div>
         )}
       </div>
+
+      {/* ============ TRANSLATE MODAL ============ */}
+      {translateOpen && (
+        <div
+          data-testid="translate-modal"
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={(e) => { if (e.target === e.currentTarget && !translateBusy) setTranslateOpen(false); }}
+        >
+          <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full bg-[#E8F1F9] flex items-center justify-center text-[#0069FE]">
+                  <Languages size={18} />
+                </div>
+                <div>
+                  <div className="font-display font-bold text-lg leading-tight">Duplicar e Traduzir</div>
+                  <div className="text-xs text-[#5B6B82]">Cria uma cópia traduzida com OpenAI</div>
+                </div>
+              </div>
+              {!translateBusy && (
+                <button onClick={() => setTranslateOpen(false)} className="text-[#5B6B82] hover:text-[#0F172A]">
+                  <X size={18} />
+                </button>
+              )}
+            </div>
+
+            <p className="text-sm text-[#5B6B82] mb-4">
+              Vai duplicar <b>{selected?.name}</b> e traduzir automaticamente todos os textos (nome, prompt, regras, knowledge, icebreakers, welcome). IDs, chaves API e webhooks <u>não são copiados</u>.
+            </p>
+
+            <label className="label">Idioma de destino</label>
+            <select
+              data-testid="translate-target"
+              value={translateTarget}
+              onChange={(e) => setTranslateTarget(e.target.value)}
+              disabled={translateBusy}
+              className="input-base mb-1"
+            >
+              <option value="pt">🇵🇹 Português Europeu (pt-PT)</option>
+              <option value="en">🇬🇧 English</option>
+              <option value="es">🇪🇸 Español</option>
+              <option value="fr">🇫🇷 Français</option>
+              <option value="de">🇩🇪 Deutsch</option>
+              <option value="ca">🏴 Català</option>
+            </select>
+            <p className="text-[11px] text-[#5B6B82] mb-4">
+              A tradução demora ~15-40s consoante o tamanho do prompt. Marcas próprias (Consenso Plus, ImmoAI, StayLocal, Maria, ABBI) e URLs são preservadas.
+            </p>
+
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setTranslateOpen(false)}
+                disabled={translateBusy}
+                className="btn-ghost text-sm"
+              >
+                Cancelar
+              </button>
+              <button
+                data-testid="btn-confirm-translate"
+                onClick={duplicateTranslate}
+                disabled={translateBusy}
+                className="btn-primary text-sm"
+              >
+                {translateBusy ? (
+                  <><Loader2 size={13} className="animate-spin" /> A traduzir…</>
+                ) : (
+                  <><Languages size={13} /> Traduzir agora</>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
