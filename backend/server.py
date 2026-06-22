@@ -11,6 +11,7 @@ from fastapi import FastAPI, APIRouter, HTTPException, Depends, WebSocket, WebSo
 from fastapi.responses import HTMLResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from pydantic import BaseModel
 
 from models import (
     Tenant, User, RegisterInput, LoginInput, AuthResponse,
@@ -618,17 +619,21 @@ async def duplicate_agent(agent_id: str, claims=Depends(current_user)):
     return await db.agents.find_one({"id": clone["id"]}, {"_id": 0})
 
 
+class DuplicateTranslateInput(BaseModel):
+    target_language: str
+
+
 @api.post("/agents/{agent_id}/duplicate-translate")
 async def duplicate_and_translate_agent(
     agent_id: str,
-    body: dict,
+    body: DuplicateTranslateInput,
     claims=Depends(current_user),
 ):
     """Duplica + traduz TODOS os campos textuais para o idioma alvo.
     Body: { "target_language": "en|es|fr|de|ca|pt" }"""
     from ai.translator import translate_agent_payload, SUPPORTED_LANGUAGES
 
-    target = (body or {}).get("target_language") or ""
+    target = body.target_language
     if target not in SUPPORTED_LANGUAGES:
         raise HTTPException(400, f"Idioma de destino inválido. Suportados: {list(SUPPORTED_LANGUAGES.keys())}")
 
