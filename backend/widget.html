@@ -166,8 +166,8 @@
     <button class="close-btn" id="closeBtn" aria-label="Fechar" type="button">×</button>
   </div>
   <div class="msgs" id="msgs"></div>
-  <form class="inp" id="f"><input id="t" placeholder="Escrever mensagem..." required aria-label="Mensagem">
-    <button aria-label="Enviar">
+  <form class="inp" id="f"><input id="t" placeholder="Escrever mensagem…" required aria-label="Mensagem">
+    <button aria-label="Enviar" id="sendBtn">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 12l20-9-5 19-5-8-10-2z" stroke="#fff" stroke-width="2" stroke-linejoin="round"/></svg>
     </button>
   </form>
@@ -188,6 +188,156 @@ const avEl = document.getElementById("av");
 const avInnerEl = document.getElementById("avInner");
 const nameEl = document.getElementById("agentName");
 let agent = { name: "Assistente", avatar_url: "", welcome_message: "Olá! Como posso ajudar?", icebreakers: [] };
+
+// ============ i18n — Widget UI strings (6 languages, EN fallback) ============
+const I18N = {
+  pt: {
+    placeholder: "Escrever mensagem…",
+    closeAria: "Fechar",
+    sendAria: "Enviar",
+    messageAria: "Mensagem",
+    connecting: "Olá! Estamos a ligar-nos ao servidor…",
+    defaultWelcome: "Olá! Como posso ajudar?",
+    modalTitle: "📅 Marcar visita",
+    modalSub: "Reserve um horário para visitar este imóvel. A equipa entrará em contacto para confirmar.",
+    fldName: "Nome completo", phName: "O seu nome",
+    fldEmail: "Email", phEmail: "email@exemplo.pt",
+    fldPhone: "Telefone (opcional)", phPhone: "+351 …",
+    fldDate: "Data", fldTime: "Hora",
+    btnCancel: "Cancelar", btnConfirm: "Confirmar visita", btnConfirming: "A confirmar…",
+    errName: "Por favor indique o seu nome.",
+    errEmail: "Email inválido.",
+    errDate: "Por favor escolha uma data.",
+    errVisitFail: "Não foi possível marcar a visita. Tente novamente.",
+    bookVisit: "📅 Marcar visita",
+    visitBookedFor: "✨ Visita marcada para",
+    visitAt: "às",
+  },
+  en: {
+    placeholder: "Type your message…",
+    closeAria: "Close",
+    sendAria: "Send",
+    messageAria: "Message",
+    connecting: "Hi! Connecting to the server…",
+    defaultWelcome: "Hi! How can I help?",
+    modalTitle: "📅 Book a visit",
+    modalSub: "Reserve a time to visit this property. Our team will get in touch to confirm.",
+    fldName: "Full name", phName: "Your name",
+    fldEmail: "Email", phEmail: "email@example.com",
+    fldPhone: "Phone (optional)", phPhone: "+1 …",
+    fldDate: "Date", fldTime: "Time",
+    btnCancel: "Cancel", btnConfirm: "Confirm visit", btnConfirming: "Confirming…",
+    errName: "Please enter your name.",
+    errEmail: "Invalid email.",
+    errDate: "Please pick a date.",
+    errVisitFail: "Unable to book the visit. Please try again.",
+    bookVisit: "📅 Book a visit",
+    visitBookedFor: "✨ Visit booked for",
+    visitAt: "at",
+  },
+  es: {
+    placeholder: "Escribe tu mensaje…",
+    closeAria: "Cerrar",
+    sendAria: "Enviar",
+    messageAria: "Mensaje",
+    connecting: "¡Hola! Conectándonos al servidor…",
+    defaultWelcome: "¡Hola! ¿En qué te puedo ayudar?",
+    modalTitle: "📅 Reservar visita",
+    modalSub: "Reserva una hora para visitar este inmueble. El equipo se pondrá en contacto para confirmar.",
+    fldName: "Nombre completo", phName: "Tu nombre",
+    fldEmail: "Email", phEmail: "email@ejemplo.es",
+    fldPhone: "Teléfono (opcional)", phPhone: "+34 …",
+    fldDate: "Fecha", fldTime: "Hora",
+    btnCancel: "Cancelar", btnConfirm: "Confirmar visita", btnConfirming: "Confirmando…",
+    errName: "Por favor indica tu nombre.",
+    errEmail: "Email no válido.",
+    errDate: "Por favor elige una fecha.",
+    errVisitFail: "No se pudo reservar la visita. Inténtalo de nuevo.",
+    bookVisit: "📅 Reservar visita",
+    visitBookedFor: "✨ Visita reservada para el",
+    visitAt: "a las",
+  },
+  fr: {
+    placeholder: "Écrivez votre message…",
+    closeAria: "Fermer",
+    sendAria: "Envoyer",
+    messageAria: "Message",
+    connecting: "Bonjour ! Connexion au serveur…",
+    defaultWelcome: "Bonjour ! Comment puis-je vous aider ?",
+    modalTitle: "📅 Planifier une visite",
+    modalSub: "Réservez un créneau pour visiter ce bien. L'équipe vous contactera pour confirmer.",
+    fldName: "Nom complet", phName: "Votre nom",
+    fldEmail: "Email", phEmail: "email@exemple.fr",
+    fldPhone: "Téléphone (optionnel)", phPhone: "+33 …",
+    fldDate: "Date", fldTime: "Heure",
+    btnCancel: "Annuler", btnConfirm: "Confirmer la visite", btnConfirming: "Confirmation…",
+    errName: "Veuillez indiquer votre nom.",
+    errEmail: "Email invalide.",
+    errDate: "Veuillez choisir une date.",
+    errVisitFail: "Impossible de planifier la visite. Veuillez réessayer.",
+    bookVisit: "📅 Planifier une visite",
+    visitBookedFor: "✨ Visite planifiée le",
+    visitAt: "à",
+  },
+  de: {
+    placeholder: "Nachricht eingeben…",
+    closeAria: "Schließen",
+    sendAria: "Senden",
+    messageAria: "Nachricht",
+    connecting: "Hallo! Verbindung zum Server wird hergestellt…",
+    defaultWelcome: "Hallo! Wie kann ich helfen?",
+    modalTitle: "📅 Besichtigung vereinbaren",
+    modalSub: "Reserviere einen Termin zur Besichtigung. Das Team wird sich zur Bestätigung melden.",
+    fldName: "Vollständiger Name", phName: "Ihr Name",
+    fldEmail: "Email", phEmail: "email@beispiel.de",
+    fldPhone: "Telefon (optional)", phPhone: "+49 …",
+    fldDate: "Datum", fldTime: "Uhrzeit",
+    btnCancel: "Abbrechen", btnConfirm: "Besichtigung bestätigen", btnConfirming: "Wird bestätigt…",
+    errName: "Bitte geben Sie Ihren Namen an.",
+    errEmail: "Ungültige Email.",
+    errDate: "Bitte wählen Sie ein Datum.",
+    errVisitFail: "Besichtigung konnte nicht gebucht werden. Bitte erneut versuchen.",
+    bookVisit: "📅 Besichtigung vereinbaren",
+    visitBookedFor: "✨ Besichtigung gebucht für",
+    visitAt: "um",
+  },
+  ca: {
+    placeholder: "Escriu un missatge…",
+    closeAria: "Tancar",
+    sendAria: "Enviar",
+    messageAria: "Missatge",
+    connecting: "Hola! Connectant amb el servidor…",
+    defaultWelcome: "Hola! Com et puc ajudar?",
+    modalTitle: "📅 Reservar visita",
+    modalSub: "Reserva una hora per visitar aquest immoble. L'equip es posarà en contacte per confirmar.",
+    fldName: "Nom complet", phName: "El teu nom",
+    fldEmail: "Email", phEmail: "email@exemple.cat",
+    fldPhone: "Telèfon (opcional)", phPhone: "+34 …",
+    fldDate: "Data", fldTime: "Hora",
+    btnCancel: "Cancel·lar", btnConfirm: "Confirmar visita", btnConfirming: "Confirmant…",
+    errName: "Si us plau, indica el teu nom.",
+    errEmail: "Email no vàlid.",
+    errDate: "Si us plau, tria una data.",
+    errVisitFail: "No s'ha pogut reservar la visita. Torna-ho a provar.",
+    bookVisit: "📅 Reservar visita",
+    visitBookedFor: "✨ Visita reservada per al",
+    visitAt: "a les",
+  },
+};
+
+let LANG = "pt";          // active language (set by loadAgent from agent.language)
+let T = I18N.pt;          // active i18n table (shortcut)
+
+function applyLanguage(lang) {
+  LANG = (lang && I18N[lang]) ? lang : "en";
+  T = I18N[LANG] || I18N.en;
+  document.documentElement.lang = LANG;
+  // Update DOM strings that already exist at load time
+  try { t.placeholder = T.placeholder; } catch (e) {}
+  try { t.setAttribute("aria-label", T.messageAria); } catch (e) {}
+  try { document.getElementById("closeBtn").setAttribute("aria-label", T.closeAria); } catch (e) {}
+  try { document.getElementById("sendBtn").setAttribute("aria-label", T.sendAria); } catch (e) {}
+}
 
 function initials(s) { return (s || "A").trim().slice(0, 2).toUpperCase(); }
 
@@ -330,7 +480,7 @@ function botMsg(text, icebreakers, cards, opts) {
           // Marcar visita button — opens in-widget modal
           const propTitle = (c.title || "").replace(/"/g, '&quot;');
           const propLink = (c.link || "").replace(/"/g, '&quot;');
-          actionsHtml += '<button class="book" data-prop-title="' + propTitle + '" data-prop-link="' + propLink + '">📅 Marcar visita</button>';
+          actionsHtml += '<button class="book" data-prop-title="' + propTitle + '" data-prop-link="' + propLink + '">' + T.bookVisit + '</button>';
         }
         actionsHtml += '</div>';
       }
@@ -400,23 +550,23 @@ function openBookModal(propertyTitle, propertyLink) {
   bg.className = "cp-modal-bg";
   const minDate = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
   bg.innerHTML = '<div class="cp-modal" role="dialog" aria-labelledby="cp-modal-title">'
-    + '<h3 id="cp-modal-title">📅 Marcar visita</h3>'
-    + '<div class="sub">Reserve um horário para visitar este imóvel. A equipa entrará em contacto para confirmar.</div>'
+    + '<h3 id="cp-modal-title">' + T.modalTitle + '</h3>'
+    + '<div class="sub">' + T.modalSub + '</div>'
     + (propertyTitle ? '<div class="prop">🏠 ' + propertyTitle + '</div>' : '')
-    + '<label>Nome completo</label>'
-    + '<input type="text" id="bk-name" autocomplete="name" placeholder="O seu nome">'
-    + '<label>Email</label>'
-    + '<input type="email" id="bk-email" autocomplete="email" placeholder="email@exemplo.pt">'
-    + '<label>Telefone (opcional)</label>'
-    + '<input type="tel" id="bk-phone" autocomplete="tel" placeholder="+351 ...">'
+    + '<label>' + T.fldName + '</label>'
+    + '<input type="text" id="bk-name" autocomplete="name" placeholder="' + T.phName + '">'
+    + '<label>' + T.fldEmail + '</label>'
+    + '<input type="email" id="bk-email" autocomplete="email" placeholder="' + T.phEmail + '">'
+    + '<label>' + T.fldPhone + '</label>'
+    + '<input type="tel" id="bk-phone" autocomplete="tel" placeholder="' + T.phPhone + '">'
     + '<div class="row">'
-    +   '<div><label>Data</label><input type="date" id="bk-date" min="' + minDate + '"></div>'
-    +   '<div><label>Hora</label><input type="time" id="bk-time" value="11:00"></div>'
+    +   '<div><label>' + T.fldDate + '</label><input type="date" id="bk-date" min="' + minDate + '"></div>'
+    +   '<div><label>' + T.fldTime + '</label><input type="time" id="bk-time" value="11:00"></div>'
     + '</div>'
     + '<div class="err" id="bk-err"></div>'
     + '<div class="btn-row">'
-    +   '<button class="cancel" type="button" id="bk-cancel">Cancelar</button>'
-    +   '<button class="confirm" type="button" id="bk-confirm">Confirmar visita</button>'
+    +   '<button class="cancel" type="button" id="bk-cancel">' + T.btnCancel + '</button>'
+    +   '<button class="confirm" type="button" id="bk-confirm">' + T.btnConfirm + '</button>'
     + '</div>'
     + '</div>';
   document.body.appendChild(bg);
@@ -446,10 +596,10 @@ function openBookModal(propertyTitle, propertyLink) {
     const phone = (phoneI.value || "").trim();
     const date = (dateI.value || "").trim();
     const time = (timeI.value || "").trim();
-    if (!name || name.length < 2) return errEl.textContent = "Por favor indique o seu nome.";
-    if (!validateEmail(email)) return errEl.textContent = "Email inválido.";
-    if (!date) return errEl.textContent = "Por favor escolha uma data.";
-    confirm.disabled = true; confirm.textContent = "A confirmar…";
+    if (!name || name.length < 2) return errEl.textContent = T.errName;
+    if (!validateEmail(email)) return errEl.textContent = T.errEmail;
+    if (!date) return errEl.textContent = T.errDate;
+    confirm.disabled = true; confirm.textContent = T.btnConfirming;
     try {
       const j = await postWithRetry(API + "/webchat/" + TENANT + "/book-visit", {
         name: name, email: email, phone: phone, date: date, time: time,
@@ -458,11 +608,11 @@ function openBookModal(propertyTitle, propertyLink) {
       });
       close();
       // Show celebratory message in chat
-      botMsg(j.message_pt || ("✨ Visita marcada para " + date + (time ? " às " + time : "") + "."), [], [], { continuation: true });
+      botMsg(j.message_pt || (T.visitBookedFor + " " + date + (time ? " " + T.visitAt + " " + time : "") + "."), [], [], { continuation: true });
       NAME_V = name; // remember
     } catch (err) {
-      errEl.textContent = "Não foi possível marcar a visita. Tente novamente.";
-      confirm.disabled = false; confirm.textContent = "Confirmar visita";
+      errEl.textContent = T.errVisitFail;
+      confirm.disabled = false; confirm.textContent = T.btnConfirm;
     }
   });
 }
@@ -675,11 +825,13 @@ async function loadAgent() {
   }
   if (!j) {
     avInnerEl.textContent = "A";
-    botMsg("Olá! Estamos a ligar-nos ao servidor…", [], []);
+    botMsg(T.connecting, [], []);
     setTimeout(loadAgent, 5000);
     return;
   }
   agent = j;
+  // Apply per-agent language FIRST so subsequent UI strings use it
+  applyLanguage(j.language || "pt");
   // Apply per-agent theme overrides (CSS variables) — supports .primary and .bot
   if (j.theme && typeof j.theme === "object") {
     const root = document.documentElement.style;
@@ -700,7 +852,7 @@ async function loadAgent() {
   } else {
     avInnerEl.textContent = initials(j.name);
   }
-  botMsg(j.welcome_message || "Olá! Como posso ajudar?", j.icebreakers || [], []);
+  botMsg(j.welcome_message || T.defaultWelcome, j.icebreakers || [], []);
 }
 
 f.addEventListener("submit", e => {

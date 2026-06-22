@@ -428,7 +428,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
             return {
                 "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
                 "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
-                "theme": THEME,
+                "theme": THEME, "default_language": "pt",
                 "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
             }
         if "staylocal" in name_low:
@@ -439,7 +439,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
             return {
                 "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
                 "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
-                "theme": THEME,
+                "theme": THEME, "default_language": "pt",
                 "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
             }
         if "tejo" in name_low:
@@ -450,7 +450,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
             return {
                 "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
                 "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
-                "theme": THEME,
+                "theme": THEME, "default_language": "pt",
                 "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
             }
         if "immoai" in name_low or "immo ai" in name_low:
@@ -461,7 +461,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
             return {
                 "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
                 "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
-                "theme": THEME,
+                "theme": THEME, "default_language": "pt",
                 "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
             }
         if "abby" in name_low or "abbi" in name_low:
@@ -475,7 +475,7 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
                     "📈 Imóveis para investimento",
                     "📑 Que documentos preciso?",
                 ],
-                "theme": CONSENSO_THEME,
+                "theme": CONSENSO_THEME, "default_language": "pt",
             }
     except Exception as e:
         logger.warning(f"seed_patch_for_agent failed for '{agent_name}': {e}")

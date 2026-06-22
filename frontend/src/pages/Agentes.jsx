@@ -414,9 +414,17 @@ const Agentes = () => {
                 <div className="grid grid-cols-2 gap-4 pt-4 border-t border-[#E5EAF2]">
                   <div><label className="label">Idioma predefinido</label>
                     <select data-testid="agent-lang" value={selected.default_language || "pt"} onChange={(e) => update("default_language", e.target.value)} className="input-base">
-                      <option value="pt">Português (pt-PT)</option><option value="en">English</option>
-                      <option value="es">Español</option><option value="fr">Français</option>
-                    </select></div>
+                      <option value="pt">Português (pt-PT)</option>
+                      <option value="en">English</option>
+                      <option value="es">Español</option>
+                      <option value="fr">Français</option>
+                      <option value="de">Deutsch</option>
+                      <option value="ca">Català</option>
+                    </select>
+                    <p className="text-[11px] text-[#5B6B82] mt-1">
+                      Define o idioma da UI do widget (placeholder, modal de visita, botões). A IA detecta e responde automaticamente no idioma do utilizador.
+                    </p>
+                  </div>
                   <div><label className="label">Estado</label>
                     <select data-testid="agent-active" value={selected.active ? "1" : "0"} onChange={(e) => update("active", e.target.value === "1")} className="input-base">
                       <option value="1">Ativo</option><option value="0">Inativo</option>
