@@ -13,6 +13,11 @@ from .router import llm_complete
 
 logger = logging.getLogger(__name__)
 
+# Limita concorrência de chamadas LLM para evitar rate-limit (429) e sobrecarga
+# do event-loop quando se traduzem muitos campos em paralelo. 3 paralelas é
+# o ponto certo entre velocidade e estabilidade.
+_TRANSLATE_SEMAPHORE = asyncio.Semaphore(3)
+
 SUPPORTED_LANGUAGES = {
     "pt": "Português Europeu (pt-PT)",
     "en": "English",
@@ -85,26 +90,27 @@ async def translate_text(
     session = f"translate-{uuid.uuid4().hex[:12]}"
     last_err: Optional[Exception] = None
     # 1 retry with backoff on transient LLM failures (rate-limit / 5xx)
-    for attempt in range(2):
-        try:
-            out = await llm_complete(
-                system_message=_TRANSLATION_SYSTEM,
-                user_text=_user_prompt(text, target_lang),
-                session_id=session,
-                task="fast",
-                api_provider="emergent",   # always platform key for internal feature
-                api_key=None,
-            )
-            cleaned = (out or "").strip()
-            # Strip occasional wrapping quotes the model may add
-            if cleaned.startswith('"') and cleaned.endswith('"') and cleaned.count('"') == 2:
-                cleaned = cleaned[1:-1]
-            return cleaned or text
-        except Exception as e:
-            last_err = e
-            logger.warning(f"translate_text attempt {attempt+1} failed ({target_lang}): {e}")
-            if attempt == 0:
-                await asyncio.sleep(1.2)  # brief backoff before retry
+    async with _TRANSLATE_SEMAPHORE:
+        for attempt in range(2):
+            try:
+                out = await llm_complete(
+                    system_message=_TRANSLATION_SYSTEM,
+                    user_text=_user_prompt(text, target_lang),
+                    session_id=session,
+                    task="fast",
+                    api_provider="emergent",   # always platform key for internal feature
+                    api_key=None,
+                )
+                cleaned = (out or "").strip()
+                # Strip occasional wrapping quotes the model may add
+                if cleaned.startswith('"') and cleaned.endswith('"') and cleaned.count('"') == 2:
+                    cleaned = cleaned[1:-1]
+                return cleaned or text
+            except Exception as e:
+                last_err = e
+                logger.warning(f"translate_text attempt {attempt+1} failed ({target_lang}): {e}")
+                if attempt == 0:
+                    await asyncio.sleep(1.2)  # brief backoff before retry
     # Both attempts failed — re-raise so caller endpoint surfaces an honest error
     raise RuntimeError(f"LLM falhou após 2 tentativas: {str(last_err)[:200]}")
 

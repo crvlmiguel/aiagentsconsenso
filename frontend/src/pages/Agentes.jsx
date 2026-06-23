@@ -211,7 +211,18 @@ const Agentes = () => {
   const [translateOpen, setTranslateOpen] = useState(false);
   const [translateTarget, setTranslateTarget] = useState("en");
   const [translateBusy, setTranslateBusy] = useState(false);
+  const [translateElapsed, setTranslateElapsed] = useState(0);  // seconds elapsed
   const [duplicateBusy, setDuplicateBusy] = useState(false);
+
+  // Timer for progress bar while translation is running
+  useEffect(() => {
+    if (!translateBusy) { setTranslateElapsed(0); return; }
+    const start = Date.now();
+    const iv = setInterval(() => {
+      setTranslateElapsed(Math.floor((Date.now() - start) / 1000));
+    }, 500);
+    return () => clearInterval(iv);
+  }, [translateBusy]);
 
   const duplicatePlain = async () => {
     if (!selected?.id) { toast.error("Guarde o agente antes de duplicar."); return; }
@@ -233,16 +244,24 @@ const Agentes = () => {
     if (!translateTarget) { toast.error("Escolha o idioma de destino."); return; }
     setTranslateBusy(true);
     try {
+      // Tradução pode demorar 20-90s (depende do tamanho do prompt do agente).
+      // Aumentamos o timeout do axios apenas para esta chamada — 180s.
       const { data } = await api.post(
         `/agents/${selected.id}/duplicate-translate`,
         { target_language: translateTarget },
+        { timeout: 180000 },
       );
       toast.success(`Agente criado: ${data.name}`, { duration: 5000 });
       setTranslateOpen(false);
       await load();
       setSelected(data);
     } catch (e) {
-      toast.error(e?.response?.data?.detail || "Falha na tradução");
+      // Mensagem clara para timeout
+      let msg = e?.response?.data?.detail || e?.message || "Falha na tradução";
+      if (e?.code === "ECONNABORTED" || /timeout/i.test(msg)) {
+        msg = "A tradução demorou mais do que o esperado. A tarefa pode ter sido concluída — verifica a lista de agentes daqui a uns segundos. Se não apareceu, tenta de novo.";
+      }
+      toast.error(msg, { duration: 8000 });
     } finally {
       setTranslateBusy(false);
     }
@@ -1188,50 +1207,78 @@ const Agentes = () => {
               )}
             </div>
 
-            <p className="text-sm text-[#5B6B82] mb-4">
-              Vai duplicar <b>{selected?.name}</b> e traduzir automaticamente todos os textos (nome, prompt, regras, knowledge, icebreakers, welcome). IDs, chaves API e webhooks <u>não são copiados</u>.
-            </p>
+            {!translateBusy ? (
+              <>
+                <p className="text-sm text-[#5B6B82] mb-4">
+                  Vai duplicar <b>{selected?.name}</b> e traduzir automaticamente todos os textos (nome, prompt, regras, knowledge, icebreakers, welcome). IDs, chaves API e webhooks <u>não são copiados</u>.
+                </p>
 
-            <label className="label">Idioma de destino</label>
-            <select
-              data-testid="translate-target"
-              value={translateTarget}
-              onChange={(e) => setTranslateTarget(e.target.value)}
-              disabled={translateBusy}
-              className="input-base mb-1"
-            >
-              <option value="pt">🇵🇹 Português Europeu (pt-PT)</option>
-              <option value="en">🇬🇧 English</option>
-              <option value="es">🇪🇸 Español</option>
-              <option value="fr">🇫🇷 Français</option>
-              <option value="de">🇩🇪 Deutsch</option>
-              <option value="ca">🏴 Català</option>
-            </select>
-            <p className="text-[11px] text-[#5B6B82] mb-4">
-              A tradução demora ~15-40s consoante o tamanho do prompt. Marcas próprias (Consenso Plus, ImmoAI, StayLocal, Maria, ABBI) e URLs são preservadas.
-            </p>
+                <label className="label">Idioma de destino</label>
+                <select
+                  data-testid="translate-target"
+                  value={translateTarget}
+                  onChange={(e) => setTranslateTarget(e.target.value)}
+                  className="input-base mb-1"
+                >
+                  <option value="pt">🇵🇹 Português Europeu (pt-PT)</option>
+                  <option value="en">🇬🇧 English</option>
+                  <option value="es">🇪🇸 Español</option>
+                  <option value="fr">🇫🇷 Français</option>
+                  <option value="de">🇩🇪 Deutsch</option>
+                  <option value="ca">🏴 Català</option>
+                </select>
+                <p className="text-[11px] text-[#5B6B82] mb-4">
+                  A tradução pode demorar até 90 segundos para agentes com prompts grandes. <b>Não feches esta janela nem navegues para outra página</b> durante a tradução.
+                </p>
 
-            <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setTranslateOpen(false)}
-                disabled={translateBusy}
-                className="btn-ghost text-sm"
-              >
-                Cancelar
-              </button>
-              <button
-                data-testid="btn-confirm-translate"
-                onClick={duplicateTranslate}
-                disabled={translateBusy}
-                className="btn-primary text-sm"
-              >
-                {translateBusy ? (
-                  <><Loader2 size={13} className="animate-spin" /> A traduzir…</>
-                ) : (
-                  <><Languages size={13} /> Traduzir agora</>
-                )}
-              </button>
-            </div>
+                <div className="flex gap-2 justify-end">
+                  <button onClick={() => setTranslateOpen(false)} className="btn-ghost text-sm">
+                    Cancelar
+                  </button>
+                  <button
+                    data-testid="btn-confirm-translate"
+                    onClick={duplicateTranslate}
+                    className="btn-primary text-sm"
+                  >
+                    <Languages size={13} /> Traduzir agora
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                {/* BUSY STATE — barra de progresso visual */}
+                <div className="py-3" data-testid="translate-progress">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="text-sm font-semibold text-[#0F172A]">
+                      A traduzir para {({pt:"Português",en:"English",es:"Español",fr:"Français",de:"Deutsch",ca:"Català"})[translateTarget]}…
+                    </div>
+                    <div className="text-xs font-mono text-[#5B6B82] tabular-nums">
+                      {translateElapsed}s
+                    </div>
+                  </div>
+
+                  {/* Determinate progress estimated (90s expected → cap at 95%) */}
+                  <div className="w-full h-2 bg-[#E5EAF2] rounded-full overflow-hidden mb-3">
+                    <div
+                      className="h-full bg-gradient-to-r from-[#4591CE] to-[#0069FE] transition-all duration-700 ease-out"
+                      style={{
+                        width: `${Math.min(95, (translateElapsed / 60) * 100)}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="text-xs text-[#5B6B82] space-y-1">
+                    <div className="flex items-center gap-2">
+                      <Loader2 size={12} className="animate-spin text-[#0069FE]" />
+                      A traduzir nome, prompt, regras, knowledge, icebreakers e welcome…
+                    </div>
+                    <div className="text-[11px] text-[#94A3B8] mt-3">
+                      ⚠️ Aguarda — não feches esta janela nem navegues para outra página. A página vai recarregar a lista de agentes assim que terminar.
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
