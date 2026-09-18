@@ -571,6 +571,10 @@ async def reset_agent_defaults(agent_id: str, claims=Depends(current_user)):
         raise HTTPException(400, "Este agente não tem predefinição disponível.")
 
     seed_patch["is_customized"] = False
+    # Reset também os campos configuráveis novos (scheduling_link, allowed_domains)
+    # para valores vazios — garante que reset-defaults é autoritativo.
+    seed_patch.setdefault("scheduling_link", "")
+    seed_patch.setdefault("allowed_domains", [])
     seed_patch["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.agents.update_one({"id": agent_id}, {"$set": seed_patch})
     return await db.agents.find_one({"id": agent_id}, {"_id": 0})

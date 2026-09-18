@@ -797,9 +797,14 @@ async function send(text) {
     }
     typing.remove();
     botMsg("⚠️ Problema de ligação. A tentar novamente assim que possível.", [], []);
-    setTimeout(() => {
-      if (navigator.onLine) send(text);
-    }, 4000);
+    // Auto-retry APENAS quando estamos offline e recuperamos rede.
+    // Não fazemos setTimeout(send) para evitar pilha de retries em cascata
+    // quando o endpoint devolve HTTP 5xx repetidamente.
+    if (!navigator.onLine) {
+      window.addEventListener("online", () => {
+        if (!SENDING) send(text);
+      }, { once: true });
+    }
   } finally {
     SENDING = false;
     try { document.getElementById("sendBtn").disabled = false; t.disabled = false; t.focus(); } catch (e) {}

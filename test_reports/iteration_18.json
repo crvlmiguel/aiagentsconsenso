@@ -1,0 +1,38 @@
+{
+  "summary": "Verified iteration-18 guardrails bundle end-to-end. Backend: 6/7 pytest cases pass (anti-repetition after 'EU'+'quanto custa PRO', anti-duplicate <5s, PUT/GET scheduling_link+allowed_domains on Abby, pipedrive link injected for 'quero marcar demonstração' + 'quero agendar', URL whitelist strips idealista.pt/imovirtual.com). Frontend: widget button lock (SENDING flag + disabled input/button) correctly blocks rapid successive clicks — real users cannot trigger duplicate sends (only 1 click succeeds; 2nd/3rd time out because element is disabled). Anti-duplicate log entry confirmed in backend (`[anti-dup] duplicate user message dropped`). Cleanup done manually via PUT (see minor bug below).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/agents/{id}/reset-defaults", "issue": "seed_patch_for_agent() does not include scheduling_link or allowed_domains in the reset dict, so after reset-defaults these two new fields remain unchanged (persist). Cleanup must be done via explicit PUT setting them to empty. Suggest adding scheduling_link:'' and allowed_domains:[] to every seed_patch (or explicitly reset them in reset_agent_defaults())."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Widget streaming (SSE)", "issue": "Preview widget hit /webchat/{tenant}/stream failures during Playwright run causing auto-retry (line 800-802 of widget.html schedules send(text) again after 4s if navigator.onLine). This makes it look like duplicate messages were sent, but the underlying button lock is fine. Consider suppressing auto-retry when the failure was an HTTP error (not a network drop), and/or gate the retry behind SENDING flag to prevent piling up. Not blocking user's reported bug.", "affected_selectors": ["#sendBtn", "#t"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter18_guardrails.py",
+    "/app/test_reports/pytest/iter18_results.xml"
+  ],
+  "action_items": [
+    "MINOR: include scheduling_link and allowed_domains in reset-defaults seed patches (or clear them explicitly) so operators can revert an agent completely via one call.",
+    "OPTIONAL: harden widget auto-retry so an HTTP 4xx/5xx from the stream endpoint does not schedule an unconditional send(text) after 4s — currently it can pile up messages if the endpoint is intermittently failing."
+  ],
+  "critical_code_review_comments": [
+    "guardrails.py::filter_urls_by_whitelist regex may match plain words containing dots (e.g. 'olá.com' typos) — consider tightening minimum TLD/word length, though the current impl already skips no-slash matches which mitigates most false positives.",
+    "reset_agent_defaults only patches fields present in seed_patch — new agent fields added over time will silently leak past resets. Suggest making the patch authoritative for the full public-facing surface."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter18_guardrails.py (new)"
+  ],
+  "success_rate": {"backend": "86% (6/7 — the 1 fail is a seed-patch omission, not a guardrail failure)", "frontend": "100% (lock behaves as designed; observed extra bubbles are auto-retry side-effect)"},
+  "test_credentials": "admin@consenso-agents.com / 100%Consenso",
+  "seed_data_creation": "None. Test agents (Maria, Abby) already seeded. Abby was mutated with scheduling_link + allowed_domains for tests 3-5 and manually reset to empty at the end.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "test_iter18_guardrails.py covers all 6 requested backend scenarios. The final cleanup test (reset-defaults) expects reset-defaults to clear scheduling_link/allowed_domains — currently it doesn't (minor bug). After tests, environment was cleaned via explicit PUT so Abby is back to empty scheduling_link=[] and allowed_domains=[]. For widget tests: real user rapid-clicks are BLOCKED (button.disabled=true); use plain page.click() without force=True to reproduce real behavior. The widget's SSE stream endpoint intermittently fails in preview; auto-retry then piles up bubbles — not a lock bug.",
+  "rca of the issue": "Reset-defaults uses a whitelist patch built per seed file. When new Agent model fields were added (scheduling_link, allowed_domains) in this iteration, the seed patches were not updated, so reset does not touch them. Fix: either add these fields (with empty defaults) to every _seed_patch_for_agent() branch, or explicitly zero them inside reset_agent_defaults() before applying the seed patch."
+}
