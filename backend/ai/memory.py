@@ -188,7 +188,9 @@ def collect_facts(history: List[Dict], current_text: str = "") -> Dict[str, str]
 
 
 def format_facts_pt(facts: Dict[str, str]) -> str:
-    """Constrói bloco 'JÁ SABEMOS:' para injectar no prompt."""
+    """Constrói bloco 'JÁ SABEMOS:' para injectar no prompt.
+    A primeira linha é um HARD-GUARDRAIL destacado — o LLM tende a ignorar
+    blocos genéricos, mas obedece a instruções em caixa-alta com ⛔."""
     if not facts:
         return ""
     lines = []
@@ -204,9 +206,30 @@ def format_facts_pt(facts: Dict[str, str]) -> str:
         flags.append("- ⚠️ Link de agendamento JÁ partilhado — NÃO insistir; só repetir se o utilizador pedir")
     if not lines and not flags:
         return ""
+
+    # HARD GUARDRAIL — enumerated forbidden re-asks
+    forbid = []
+    if "users" in facts:
+        forbid.append(f'❌ "quantos utilizadores/pessoas/colaboradores/agentes?" — JÁ SABES: {facts["users"]}. Se te apetecer perguntar isto, PARA e usa o número acima.')
+    if "name" in facts:
+        forbid.append(f'❌ "como te chamas?" / "qual o teu nome?" — JÁ SABES: {facts["name"]}.')
+    if "email" in facts:
+        forbid.append(f'❌ "qual o teu email?" — JÁ SABES: {facts["email"]}.')
+    if "sector" in facts:
+        forbid.append(f'❌ "que setor / que área / imobiliária ou hotel?" — JÁ SABES: {facts["sector"]}.')
+    if "phone" in facts:
+        forbid.append(f'❌ "qual o teu telefone?" — JÁ SABES: {facts["phone"]}.')
+
     out = []
+    if forbid:
+        out.append(
+            "⛔ CAMPOS JÁ CAPTURADOS — PROIBIDO VOLTAR A PERGUNTAR:\n"
+            + "\n".join(forbid)
+            + "\n\n👉 Usa estes valores DIRETAMENTE na tua resposta e AVANÇA para o próximo passo (proposta de plano, link de demo, próxima pergunta diferente). "
+              "NUNCA reformules a mesma pergunta com palavras diferentes. NUNCA digas 'para confirmar' ou 'peço desculpa pela confusão'."
+        )
     if lines:
-        out.append("JÁ SABEMOS DO UTILIZADOR (não voltar a perguntar):\n" + "\n".join(lines))
+        out.append("JÁ SABEMOS DO UTILIZADOR:\n" + "\n".join(lines))
     if flags:
         out.append("ESTADO DA CONVERSA:\n" + "\n".join(flags))
     return "\n\n".join(out)

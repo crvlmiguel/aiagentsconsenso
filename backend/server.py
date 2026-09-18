@@ -1315,6 +1315,25 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
 
     conv_id = convo["id"]
 
+    # ANTI-DUPLICATE — se a mesma mensagem chegar 2x em <5s (double-click do widget,
+    # retry automático, etc.) descartamos a segunda e devolvemos a resposta da primeira.
+    from datetime import timedelta as _td
+    recent_cutoff = (datetime.now(timezone.utc) - _td(seconds=5)).isoformat()
+    dup = await db.messages.find_one({
+        "conversation_id": conv_id, "sender": "user",
+        "text": inbound.text, "created_at": {"$gte": recent_cutoff},
+    }, {"_id": 0, "id": 1, "created_at": 1})
+    if dup:
+        logger.info(f"[anti-dup] duplicate user message dropped for conv={conv_id[:8]}")
+        # Devolve a última resposta AI da mesma conversa (se existir)
+        last_ai = await db.messages.find_one(
+            {"conversation_id": conv_id, "sender": "ai"},
+            sort=[("created_at", -1)], projection={"_id": 0},
+        )
+        if last_ai:
+            return {"conversation_id": conv_id, "reply": last_ai.get("text", ""),
+                    "cards": last_ai.get("cards", []), "duplicate": True}
+
     user_msg = {
         "id": new_id(), "tenant_id": tenant_id, "conversation_id": conv_id,
         "sender": "user", "sender_name": inbound.contact_name,

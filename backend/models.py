@@ -83,6 +83,9 @@ class Agent(BaseModel):
     email: Dict[str, Any] = Field(default_factory=dict)
     theme: Dict[str, Any] = Field(default_factory=dict)
     is_customized: bool = False
+    # Isolamento e segurança:
+    scheduling_link: str = ""              # URL oficial de agendamento (Pipedrive, Calendly, etc.)
+    allowed_domains: List[str] = Field(default_factory=list)  # whitelist para URLs em respostas
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
@@ -108,6 +111,8 @@ class AgentInput(BaseModel):
     channels: Dict[str, Dict[str, Any]] = Field(default_factory=dict)
     email: Optional[Dict[str, Any]] = Field(default_factory=dict)
     theme: Dict[str, Any] = Field(default_factory=dict)
+    scheduling_link: str = ""
+    allowed_domains: List[str] = Field(default_factory=list)
     active: bool = True
 
 

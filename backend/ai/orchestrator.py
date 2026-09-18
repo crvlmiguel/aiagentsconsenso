@@ -7,6 +7,7 @@ from .router import llm_complete, extract_json
 from .memory import collect_facts, format_facts_pt
 from .page_ctx import page_context_block
 from .global_rules import global_rules_block
+from .guardrails import apply_guardrails
 
 logger = logging.getLogger(__name__)
 
@@ -421,6 +422,16 @@ NÃO RESPONDAS EM PT SE A ÚLTIMA MENSAGEM É NOUTRO IDIOMA.
         if explicit_show_intent:
             safe_cards = server_cards[:3]
 
+    # Apply post-processing guardrails — enforced deterministically after the
+    # LLM has produced its output. This CANNOT be bypassed by prompt-injection
+    # or by the LLM ignoring the system prompt.
+    reply_text, follow_up = apply_guardrails(
+        reply_text or "", follow_up or "",
+        facts=facts, user_text=last_user_text,
+        allowed_domains=agent.get("allowed_domains") or [],
+        scheduling_link=agent.get("scheduling_link") or "",
+    )
+
     return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
 
 
@@ -628,6 +639,14 @@ INSTRUÇÕES TÉCNICAS (acima das regras globais):
     # If we never streamed a reply char (e.g. LLM emitted use_items first), emit it now
     if last_emitted == "" and reply_text:
         yield {"type": "chunk", "text": reply_text}
+
+    # Apply post-processing guardrails (same as non-streaming variant)
+    reply_text, follow_up = apply_guardrails(
+        reply_text or "", follow_up or "",
+        facts=facts, user_text=last_user_text,
+        allowed_domains=agent.get("allowed_domains") or [],
+        scheduling_link=agent.get("scheduling_link") or "",
+    )
 
     yield {
         "type": "done",

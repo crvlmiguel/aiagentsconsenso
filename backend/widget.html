@@ -619,8 +619,13 @@ function openBookModal(propertyTitle, propertyLink) {
   });
 }
 
+let SENDING = false;   // anti double-submit lock
+
 async function send(text) {
   if (!text) return;
+  if (SENDING) return;  // already processing a message; ignore double submit
+  SENDING = true;
+  try { document.getElementById("sendBtn").disabled = true; t.disabled = true; } catch (e) {}
   meMsg(text);
   const typing = document.createElement("div");
   typing.className = "typing";
@@ -795,6 +800,9 @@ async function send(text) {
     setTimeout(() => {
       if (navigator.onLine) send(text);
     }, 4000);
+  } finally {
+    SENDING = false;
+    try { document.getElementById("sendBtn").disabled = false; t.disabled = false; t.focus(); } catch (e) {}
   }
 }
 
