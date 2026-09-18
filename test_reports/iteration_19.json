@@ -1,0 +1,32 @@
+{
+  "summary": "Iteration 19 QA PT-PT — all 12 requested scenarios validated against LIVE OpenAI-backed webchat endpoint. Created /app/backend/tests/test_iter19_qa_ptpt.py (17 pytest cases across 12 test classes). Result: 17/17 PASSED in 64.85s. Regression run on iter 14/15/16/18 also GREEN (44/44 passed).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter19_qa_ptpt.py",
+    "/app/test_reports/pytest/iter19_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py grew past ~2660 lines — consider splitting webchat endpoints, admin agents endpoints and public endpoints into their own routers to keep review surface manageable.",
+    "guardrails.enforce_scheduling_link uses regex list to detect scheduler-like URLs; the '/marcar' and '/agendar' fallbacks are broad and could nuke legitimate marketing links on other agent tenants — currently safe because it always substitutes with scheduling_link, but consider scoping the substitution to non-whitelisted hosts only.",
+    "memory.collect_facts has grown into a mixed responsibility (facts + conversation flags + PT variant hints) — consider splitting `collect_facts` vs `collect_flags` to improve testability."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter19_qa_ptpt.py (new)"
+  ],
+  "success_rate": {"backend": "100% (17/17 iter19 + 44/44 regression)", "frontend": "N/A (backend-only request)"},
+  "test_credentials": "Not required — used public webchat endpoint (no auth). Admin creds if needed: admin@consenso-agents.com / 100%Consenso",
+  "seed_data_creation": "None. Conversations created with TEST_iter19_* external_user_id prefixes for easy identification; auto-created via webchat, not manually seeded.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "test_iter19_qa_ptpt.py covers all 12 QA scenarios (sticky lang EN/FR, PT variant question + no-reask, obrigado-intent reclassify, Maria Consenso Plus description, gender-neutral Clara+Maria, Clara SEO recognition, Maria users-count no-reask after 'eu' x2, Maria quote flow asks name first, Clara Pipedrive link, Maria consenso-shop link, Clara real-estate isolation, Clara chatbot redirect to Plus, Clara no Calendly invention, URL whitelist for both agents). Tests are tolerant (marker-based) since LLM output varies. Total runtime ~65s. All previous iter18 guardrails still pass. External_user_ids use TEST_iter19_* prefix; if cleanup needed, filter conversations collection by that prefix.",
+  "rca of the issue": "No bugs found. Guardrails (scrub_repeated_questions, ensure_pt_variant_question, apply_gender_neutral, enforce_scheduling_link, filter_urls_by_whitelist, ensure_scheduling_link) + memory.collect_facts flags (scheduling_confirmed, ask_pt_variant, language_variant) + _sticky_language (short-msg fallback to prev lang) all behave as designed. The determinism of the guardrail bundle is what makes the LLM-backed tests pass reliably despite prompt-model variance."
+}
