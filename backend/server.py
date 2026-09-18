@@ -623,15 +623,65 @@ class DuplicateTranslateInput(BaseModel):
     target_language: str
 
 
-@api.post("/agents/{agent_id}/duplicate-translate")
-async def duplicate_and_translate_agent(
+async def _run_translation_job(
+    job_id: str, agent: dict, tenant_id: str, target: str,
+):
+    """Background task: traduz o agente, cria o clone e atualiza o job em MongoDB.
+    Corre dentro do mesmo event-loop mas é independente do request HTTP — o
+    utilizador pode fechar a janela, navegar ou fazer logout que o job continua."""
+    from ai.translator import translate_agent_payload
+    try:
+        await db.translate_jobs.update_one(
+            {"id": job_id}, {"$set": {"status": "running", "started_at": datetime.now(timezone.utc).isoformat()}}
+        )
+        translated = await translate_agent_payload(
+            agent, target_lang=target,
+            source_lang=agent.get("default_language") or "pt",
+            api_provider="emergent",
+            api_key=None,
+        )
+        clone = await _clone_agent_core(translated, tenant_id)
+        # Suffix do idioma no nome
+        suffix = f" {LANG_LABELS.get(target, target.upper())}"
+        base_name = translated.get("name", agent.get("name", "Agente"))
+        for _code, lab in LANG_LABELS.items():
+            if base_name.endswith(f" {lab}"):
+                base_name = base_name[: -(len(lab) + 1)]
+                break
+        clone["name"] = f"{base_name}{suffix}"
+
+        await db.agents.insert_one(clone)
+        await db.translate_jobs.update_one(
+            {"id": job_id},
+            {"$set": {
+                "status": "done",
+                "agent_id": clone["id"],
+                "agent_name": clone["name"],
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+        logger.info(f"[translate-job] {job_id} done → new agent {clone['id'][:8]}")
+    except Exception as e:
+        logger.exception(f"[translate-job] {job_id} failed: {e}")
+        await db.translate_jobs.update_one(
+            {"id": job_id},
+            {"$set": {
+                "status": "failed",
+                "error": str(e)[:300],
+                "finished_at": datetime.now(timezone.utc).isoformat(),
+            }},
+        )
+
+
+@api.post("/agents/{agent_id}/translate-start")
+async def translate_start(
     agent_id: str,
     body: DuplicateTranslateInput,
     claims=Depends(current_user),
 ):
-    """Duplica + traduz TODOS os campos textuais para o idioma alvo.
-    Body: { "target_language": "en|es|fr|de|ca|pt" }"""
-    from ai.translator import translate_agent_payload, SUPPORTED_LANGUAGES
+    """Inicia uma tarefa de tradução em background e devolve o job_id imediatamente.
+    O cliente faz polling a GET /translate-jobs/{job_id} para acompanhar."""
+    from ai.translator import SUPPORTED_LANGUAGES
 
     target = body.target_language
     if target not in SUPPORTED_LANGUAGES:
@@ -643,35 +693,83 @@ async def duplicate_and_translate_agent(
     if not agent:
         raise HTTPException(404, "Agente não encontrado")
 
-    # Traduz primeiro o payload (em memória), depois clonamos e persistimos
-    # A tradução é uma operação INTERNA da plataforma — usa SEMPRE a chave
-    # Emergent (independente da configuração do agente). Isto garante que:
-    #   - agentes sem chave própria conseguem traduzir
-    #   - chaves de utilizador inválidas/expiradas não bloqueiam a feature
-    try:
-        translated = await translate_agent_payload(
-            agent, target_lang=target,
-            source_lang=agent.get("default_language") or "pt",
-            api_provider="emergent",
-            api_key=None,
-        )
-    except Exception as e:
-        logger.exception(f"translate_agent_payload failed: {e}")
-        raise HTTPException(500, f"Falha na tradução: {str(e)[:160]}")
+    job_id = new_id()
+    await db.translate_jobs.insert_one({
+        "id": job_id,
+        "tenant_id": claims["tenant_id"],
+        "source_agent_id": agent_id,
+        "source_agent_name": agent.get("name", ""),
+        "target_language": target,
+        "status": "pending",
+        "agent_id": None,
+        "agent_name": None,
+        "error": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": None,
+        "finished_at": None,
+    })
 
-    clone = await _clone_agent_core(translated, claims["tenant_id"])
-    # Suffix do idioma no nome — fica fácil distinguir versões
-    suffix = f" {LANG_LABELS.get(target, target.upper())}"
-    base_name = translated.get("name", agent.get("name", "Agente"))
-    # Strip any previous lang-suffix to avoid "Maria EN PT"
-    for code, lab in LANG_LABELS.items():
-        if base_name.endswith(f" {lab}"):
-            base_name = base_name[: -(len(lab) + 1)]
+    # Dispara a tarefa SEM await — fica a correr no event-loop, request retorna já
+    asyncio.create_task(_run_translation_job(job_id, agent, claims["tenant_id"], target))
+
+    return {"job_id": job_id, "status": "pending"}
+
+
+@api.get("/translate-jobs/{job_id}")
+async def translate_job_status(job_id: str, claims=Depends(current_user)):
+    """Polling endpoint — devolve o estado da tradução."""
+    job = await db.translate_jobs.find_one(
+        {"id": job_id, "tenant_id": claims["tenant_id"]}, {"_id": 0}
+    )
+    if not job:
+        raise HTTPException(404, "Job não encontrado")
+    # Se concluído, inclui o agente novo já normalizado
+    if job.get("status") == "done" and job.get("agent_id"):
+        new_agent = await db.agents.find_one({"id": job["agent_id"]}, {"_id": 0})
+        if new_agent:
+            job["agent"] = new_agent
+    return job
+
+
+# Endpoint legacy mantido por compatibilidade — agora delega ao novo modelo
+# para nunca mais bloquear o worker. Retorna o agent final só quando concluído
+# (pode demorar 30-90s, mas o worker NÃO fica bloqueado — usa asyncio.sleep).
+@api.post("/agents/{agent_id}/duplicate-translate")
+async def duplicate_and_translate_agent(
+    agent_id: str,
+    body: DuplicateTranslateInput,
+    claims=Depends(current_user),
+):
+    from ai.translator import SUPPORTED_LANGUAGES
+    target = body.target_language
+    if target not in SUPPORTED_LANGUAGES:
+        raise HTTPException(400, f"Idioma de destino inválido. Suportados: {list(SUPPORTED_LANGUAGES.keys())}")
+    agent = await db.agents.find_one(
+        {"id": agent_id, "tenant_id": claims["tenant_id"]}, {"_id": 0}
+    )
+    if not agent:
+        raise HTTPException(404, "Agente não encontrado")
+    job_id = new_id()
+    await db.translate_jobs.insert_one({
+        "id": job_id, "tenant_id": claims["tenant_id"],
+        "source_agent_id": agent_id,
+        "source_agent_name": agent.get("name", ""),
+        "target_language": target,
+        "status": "pending", "agent_id": None, "agent_name": None, "error": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": None, "finished_at": None,
+    })
+    asyncio.create_task(_run_translation_job(job_id, agent, claims["tenant_id"], target))
+    # Poll internally until done (max 120s)
+    for _ in range(60):
+        await asyncio.sleep(2)
+        job = await db.translate_jobs.find_one({"id": job_id}, {"_id": 0})
+        if job and job.get("status") in ("done", "failed"):
             break
-    clone["name"] = f"{base_name}{suffix}"
-
-    await db.agents.insert_one(clone)
-    return await db.agents.find_one({"id": clone["id"]}, {"_id": 0})
+    job = await db.translate_jobs.find_one({"id": job_id}, {"_id": 0})
+    if not job or job.get("status") != "done":
+        raise HTTPException(500, f"Falha na tradução: {(job or {}).get('error') or 'timeout'}")
+    return await db.agents.find_one({"id": job["agent_id"]}, {"_id": 0})
 
 
 

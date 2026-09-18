@@ -244,23 +244,54 @@ const Agentes = () => {
     if (!translateTarget) { toast.error("Escolha o idioma de destino."); return; }
     setTranslateBusy(true);
     try {
-      // Tradução pode demorar 20-90s (depende do tamanho do prompt do agente).
-      // Aumentamos o timeout do axios apenas para esta chamada — 180s.
-      const { data } = await api.post(
-        `/agents/${selected.id}/duplicate-translate`,
+      // 1. Iniciar job em background (resposta instantânea, NÃO bloqueia o worker)
+      const startRes = await api.post(
+        `/agents/${selected.id}/translate-start`,
         { target_language: translateTarget },
-        { timeout: 180000 },
       );
-      toast.success(`Agente criado: ${data.name}`, { duration: 5000 });
-      setTranslateOpen(false);
-      await load();
-      setSelected(data);
-    } catch (e) {
-      // Mensagem clara para timeout
-      let msg = e?.response?.data?.detail || e?.message || "Falha na tradução";
-      if (e?.code === "ECONNABORTED" || /timeout/i.test(msg)) {
-        msg = "A tradução demorou mais do que o esperado. A tarefa pode ter sido concluída — verifica a lista de agentes daqui a uns segundos. Se não apareceu, tenta de novo.";
+      const jobId = startRes?.data?.job_id;
+      if (!jobId) throw new Error("Sem job_id na resposta do servidor");
+
+      // 2. Polling a cada 2s até concluir (timeout total 180s)
+      const maxPollAttempts = 90;  // 90 × 2s = 180s
+      let finalAgent = null;
+      let lastError = null;
+      for (let i = 0; i < maxPollAttempts; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        try {
+          const pollRes = await api.get(`/translate-jobs/${jobId}`);
+          const job = pollRes?.data;
+          if (job?.status === "done" && job.agent) {
+            finalAgent = job.agent;
+            break;
+          }
+          if (job?.status === "failed") {
+            lastError = job.error || "Tradução falhou";
+            break;
+          }
+        } catch (pollErr) {
+          // Erro de rede num polling individual — continua a tentar
+          console.warn("translate poll err:", pollErr?.message);
+        }
       }
+
+      if (finalAgent) {
+        toast.success(`Agente criado: ${finalAgent.name}`, { duration: 5000 });
+        setTranslateOpen(false);
+        await load();
+        setSelected(finalAgent);
+      } else if (lastError) {
+        toast.error(lastError, { duration: 8000 });
+      } else {
+        toast.error(
+          "A tradução ainda está em curso. Verifica a lista de agentes daqui a uns minutos — o agente novo deve aparecer automaticamente.",
+          { duration: 10000 },
+        );
+        setTranslateOpen(false);
+        await load();  // refresh anyway, may already be done
+      }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || e?.message || "Falha ao iniciar tradução";
       toast.error(msg, { duration: 8000 });
     } finally {
       setTranslateBusy(false);
