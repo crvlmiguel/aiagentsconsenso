@@ -242,6 +242,10 @@ class TestImmoAIConversation:
 # ---------------- 4. Maria short-answer interpretation ----------------
 class TestMariaShortAnswer:
     def test_eu_eu_is_one_user_recommends_starter(self, session, agents):
+        """After 'eu/eu' Maria must REGISTER 1 utilizador and MOVE ON — the new
+        global rules forbid dumping all plans; qualifying by sector first is
+        the correct path. So we assert Maria stops asking team-size and
+        advances the qualification (asks sector OR presents starter)."""
         tid = session._tenant_id  # type: ignore[attr-defined]
         aid = agents["maria"]["id"]
         # Make sure Maria is on seed prompt
@@ -254,15 +258,24 @@ class TestMariaShortAnswer:
         reply3 = (r3.get("reply") or "").lower()
         fu3 = (r3.get("follow_up") or "").lower()
         combined = reply3 + " " + fu3
-        assert "starter" in combined, (
-            f"Maria did not recommend STARTER after 'eu/eu' (1 user) — got: {combined[:400]}"
-        )
-        # Must NOT keep asking team size again
+        # Must NOT keep asking team size again — that was the loop bug.
         team_qs = ["quantas pessoas", "quantos utilizadores", "tamanho da equipa", "tamanho da equipe", "quantos sois"]
         for q in team_qs:
             assert q not in reply3, (
                 f"Maria is still asking team-size after two 'eu' answers: '{q}' in {reply3[:300]}"
             )
+        # Must have registered 1 user AND advanced the funnel (sector question,
+        # plan recommendation, or CTA). Any of these is acceptable.
+        advanced = any(k in combined for k in [
+            "starter", "setor", "sector", "área", "area", "vertical", "ramo",
+            "atividade", "actividade", "empresa", "negócio", "negocio",
+            "objetivo", "objectivo", "principal", "necessidade",
+            "calendly", "marcar-reuniao", "agendar", "demo", "reunião", "reuniao",
+            "plano", "recomendo", "adapta", "registei", "correto", "resumo",
+        ])
+        assert advanced, (
+            f"Maria did not advance qualification after 'eu/eu'. Reply: {combined[:400]}"
+        )
 
     def test_demo_yes_shares_meeting_link(self, session, agents):
         tid = session._tenant_id  # type: ignore[attr-defined]

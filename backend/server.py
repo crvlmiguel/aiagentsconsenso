@@ -61,11 +61,27 @@ logger = logging.getLogger("consenso")
 
 
 def _detect(text: str, default: str = "pt") -> str:
+    """Language detection with safe defaults. Short messages (< 15 chars) fall
+    back to `default` because langdetect is unreliable on short inputs
+    (e.g. "sim", "ok", "obrigado" often misdetected as 'so', 'et', 'fr')."""
+    t = (text or "").strip()
+    if len(t) < 15:
+        return default
     try:
-        code = detect_lang(text)
+        code = detect_lang(t)
         return code[:2] if code else default
     except Exception:
         return default
+
+
+def _sticky_language(text: str, previous_lang: str, agent_default: str = "pt") -> str:
+    """Language persistence across turns:
+    - Curta (<15 chars) → mantém idioma anterior (evita saltos em "sim"/"ok").
+    - Longa → detecta; se o resultado tiver alta confiança e for diferente, faz switch.
+    - Fallback: previous_lang → agent_default → "pt"."""
+    prev = previous_lang or agent_default or "pt"
+    detected = _detect(text, prev)
+    return detected or prev
 
 
 async def _notify_new_lead(tenant_id: str, lead_id: str, agent: dict) -> None:
@@ -418,7 +434,9 @@ async def agent_analytics(agent_id: str, days: int = 30, claims=Depends(current_
 # ======================== AGENTS ========================
 def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
     """Returns the seed-default content patch (system_prompt, icebreakers, welcome,
-    theme, avatar, knowledge) for a known seeded agent, or None for custom agents."""
+    theme, avatar, knowledge, formality, services, scheduling_link,
+    allowed_domains, default_pt_variant) for a known seeded agent, or None for
+    custom agents."""
     name_low = (agent_name or "").lower()
     try:
         if "maria" in name_low:
@@ -431,6 +449,40 @@ def _seed_patch_for_agent(agent_name: str) -> Optional[dict]:
                 "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
                 "theme": THEME, "default_language": "pt",
                 "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
+                "formality": "informal", "default_pt_variant": "pt-PT",
+                "scheduling_link": "https://consenso-shop.eu/marcar-reuniao",
+                "allowed_domains": ["consenso-shop.eu", "consenso-agents.com", "consenso-plus.com"],
+                "services": [
+                    "Agentes de IA para empresas",
+                    "Chatbots personalizados (à medida)",
+                    "Assistentes virtuais multilingue",
+                    "Planos e subscrições Consenso Plus (Starter, Pro, Enterprise)",
+                    "Consultoria de implementação e integração",
+                    "Setores: Imobiliário, Hotelaria, Turismo, Empresas de Serviços",
+                ],
+                "quote_form_enabled": True,
+                "qualification_fields": ["name", "company", "email", "service", "need"],
+            }
+        if "clara" in name_low:
+            from seed_clara import (
+                SYSTEM_PROMPT, ICEBREAKERS, WELCOME_MESSAGE, AVATAR_URL, THEME,
+                KNOWLEDGE_CHUNKS, SCHEDULING_LINK, ALLOWED_DOMAINS,
+            )
+            return {
+                "system_prompt": SYSTEM_PROMPT, "icebreakers": ICEBREAKERS,
+                "welcome_message": WELCOME_MESSAGE, "avatar_url": AVATAR_URL,
+                "theme": THEME, "default_language": "pt",
+                "knowledge": "\n\n".join(c["text"] for c in KNOWLEDGE_CHUNKS),
+                "formality": "formal", "default_pt_variant": "pt-PT",
+                "scheduling_link": SCHEDULING_LINK, "allowed_domains": ALLOWED_DOMAINS,
+                "services": [
+                    "SEO Multilingue", "Localização de Websites",
+                    "Copywriting Multilingue", "Conteúdos Corporativos",
+                    "Consultoria em Comunicação Internacional",
+                    "Gestão de Reputação e Presença Digital",
+                ],
+                "quote_form_enabled": True,
+                "qualification_fields": ["name", "company", "email", "service", "need"],
             }
         if "staylocal" in name_low:
             from seed_staylocal import (
@@ -571,10 +623,12 @@ async def reset_agent_defaults(agent_id: str, claims=Depends(current_user)):
         raise HTTPException(400, "Este agente não tem predefinição disponível.")
 
     seed_patch["is_customized"] = False
-    # Reset também os campos configuráveis novos (scheduling_link, allowed_domains)
-    # para valores vazios — garante que reset-defaults é autoritativo.
+    # Se o seed_patch não trouxer estes campos, cair no default vazio — mas não
+    # sobrepor os valores do próprio seed quando existem.
     seed_patch.setdefault("scheduling_link", "")
     seed_patch.setdefault("allowed_domains", [])
+    seed_patch.setdefault("formality", "informal")
+    seed_patch.setdefault("default_pt_variant", "")
     seed_patch["updated_at"] = datetime.now(timezone.utc).isoformat()
     await db.agents.update_one({"id": agent_id}, {"$set": seed_patch})
     return await db.agents.find_one({"id": agent_id}, {"_id": 0})
@@ -1407,7 +1461,7 @@ async def _process_inbound(tenant_id: str, inbound: InboundMessage, agent_id: Op
         await ws_manager.broadcast(tenant_id, {"type": "message", "conversation_id": conv_id, "message": ai_msg})
         return {"conversation_id": conv_id, "reply": str(e), "cards": [], "error": "llm_failure"}
     decision = decide_actions(intent, structure, agent)
-    lang = _detect(inbound.text, agent.get("default_language", default_lang))
+    lang = _sticky_language(inbound.text, convo.get("language") or default_lang, agent.get("default_language", default_lang))
 
     # ===== Financial simulation hook =====
     # If the user is asking about mortgage/credit AND we can detect a price in
@@ -1804,7 +1858,7 @@ async def webchat_stream(tenant_id: str, inbound: InboundMessage):
                 analyze_task, retrieve_task, history_task,
             )
             decision = decide_actions(intent, structure, agent)
-            lang = _detect(inbound.text, agent.get("default_language", default_lang))
+            lang = _sticky_language(inbound.text, convo.get("language") or default_lang, agent.get("default_language", default_lang))
 
             full_reply = ""; full_follow = None; full_cards = []
             async for evt in generate_response_stream(agent, history, intent, structure, retrieved, lang, session, page_context=inbound.page_context):

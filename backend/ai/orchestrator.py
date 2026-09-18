@@ -248,7 +248,7 @@ async def generate_response(
     facts = collect_facts(history or [], last_user_text)
     facts_block = format_facts_pt(facts)
     pc_block = page_context_block(page_context)
-    rules_global = global_rules_block(language=language or default_lang)
+    rules_global = global_rules_block(language=language or default_lang, agent=agent)
 
     system = f"""{base_prompt}
 
@@ -268,20 +268,12 @@ Regras adicionais: {rules or '(nenhuma)'}
 INSTRUÇÕES TÉCNICAS (acima das regras globais):
 - 🧮 SE O CONTEXTO CONTIVER "SIMULAÇÃO CRÉDITO HABITAÇÃO calculada agora", o sistema mostrou ao cliente um cartão visual. Comenta brevemente (1 frase) e pergunta o próximo dado em falta ou propõe visita.
 - FORMATO: APENAS JSON: {{"reply": "msg principal", "follow_up": "", "use_items": [1,2]}}
-- 🚫 "follow_up" deve ser VAZIO ("") POR DEFEITO — só preencher nos casos do ponto 9 das regras globais (após captura de lead, ou link de agendamento). NUNCA parafrasear o reply.
+- 🚫 "follow_up" deve ser VAZIO ("") POR DEFEITO — só preencher em casos específicos (após captura de lead, ou link de agendamento). NUNCA parafrasear o reply.
 - MENSAGENS COMPACTAS mas COMPLETAS — prefere 1 mensagem rica em vez de 2 fragmentadas. Max 400 chars.
 - "use_items" lista [1..N] de imóveis a mostrar. Lista vazia [] se nenhum encaixa OU se o cliente NÃO demonstrou intenção imobiliária clara.
 - NÃO copies título/preço/link dos imóveis no reply — aparecem como cards automaticamente.
-- 🏠 IMÓVEIS: SÓ os mostres se o utilizador demonstrou interesse explícito (procurar, comprar, arrendar, ver portefólio). NUNCA mostres imóveis em conversas sobre planos, demos, hotelaria, clínicas, restauração ou outros setores.
-- 📅 AGENDAMENTO: quando o utilizador mostrar interesse comercial (demo, reunião, proposta, "quero saber mais", "quero ver", "como avançamos"), partilha IMEDIATAMENTE o link: https://consenso-shop.eu/marcar-reuniao. Nunca peças nome/email para "confirmar reunião" — o link trata disso.
-
-📋 APRESENTAR PLANOS — usar quebras de linha REAIS (\\n) entre cada plano. NUNCA usar "\\•" literal.
-Formato correto:
-"Temos 3 planos:
-• STARTER €49,90/mês — 2 utilizadores, 2.000 msg, Webchat + WhatsApp
-• PRO €74,90/mês ⭐ Mais Popular — 5 utilizadores, ilimitadas, 5 canais, CRM e Lead Scoring
-• ENTERPRISE sob consulta — ilimitado, follow-up auto, SLA, gestor dedicado
-Todos sem fidelização. Qual o tamanho da tua equipa?"
+- 🏠 IMÓVEIS: SÓ os mostres se o utilizador demonstrou interesse explícito (procurar, comprar, arrendar, ver portefólio). NUNCA em conversas sobre outros setores.
+- 📅 AGENDAMENTO: usa APENAS o link oficial deste agente definido nas regras globais.
 
 ⚠️ ATENÇÃO MÁXIMA — IDIOMA DA RESPOSTA:
 O cliente fala em "{reply_lang}". Responde EXCLUSIVAMENTE nesse idioma.
@@ -290,7 +282,7 @@ O cliente fala em "{reply_lang}". Responde EXCLUSIVAMENTE nesse idioma.
 - "Guten Tag" / "Wie viel" → Deutsch
 - "Hola" / "Cuánto" → Español
 - "Hallo" / "Hoeveel" → Nederlands
-- "Olá" / "Quanto" → Português Europeu (NUNCA pt-BR)
+- "Olá" / "Quanto" → Português Europeu (NUNCA pt-BR salvo se o agente ou o utilizador tiver escolhido pt-BR)
 
 NÃO RESPONDAS EM PT SE A ÚLTIMA MENSAGEM É NOUTRO IDIOMA.
 """
@@ -430,6 +422,7 @@ NÃO RESPONDAS EM PT SE A ÚLTIMA MENSAGEM É NOUTRO IDIOMA.
         facts=facts, user_text=last_user_text,
         allowed_domains=agent.get("allowed_domains") or [],
         scheduling_link=agent.get("scheduling_link") or "",
+        formality=agent.get("formality") or "informal",
     )
 
     return {"reply": reply_text, "follow_up": follow_up, "cards": safe_cards, "language": reply_lang}
@@ -522,7 +515,7 @@ async def generate_response_stream(
     facts = collect_facts(history or [], last_user_text)
     facts_block = format_facts_pt(facts)
     pc_block = page_context_block(page_context)
-    rules_global = global_rules_block(language=reply_lang)
+    rules_global = global_rules_block(language=reply_lang, agent=agent)
 
     system = f"""{base_prompt}
 
@@ -646,6 +639,7 @@ INSTRUÇÕES TÉCNICAS (acima das regras globais):
         facts=facts, user_text=last_user_text,
         allowed_domains=agent.get("allowed_domains") or [],
         scheduling_link=agent.get("scheduling_link") or "",
+        formality=agent.get("formality") or "informal",
     )
 
     yield {

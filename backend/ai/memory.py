@@ -118,8 +118,51 @@ def collect_facts(history: List[Dict], current_text: str = "") -> Dict[str, str]
             break
     # Já partilhámos o link de agendamento?
     for t in ai_texts:
-        if "consenso-shop.eu/marcar-reuniao" in t:
+        if "consenso-shop.eu/marcar-reuniao" in t or "consensoglobal.pipedrive.com" in t:
             facts["demo_link_shared"] = "yes"
+            break
+
+    # === Confirmação de reunião/demo (sim → intent de agendar) ===
+    _AFFIRMATIVE = {"sim", "s", "claro", "ok", "okay", "com certeza", "sim quero", "sim, quero", "quero", "vamos", "bora"}
+    _MEETING_CTX = ("marcar", "reunião", "reuniao", "demo", "demonstra", "agendar", "agenda")
+    last_ai = ai_texts[-1].lower() if ai_texts else ""
+    last_user_low = user_texts[-1].strip().lower() if user_texts else ""
+    if last_ai and any(c in last_ai for c in _MEETING_CTX) and (
+        last_user_low in _AFFIRMATIVE or any(last_user_low.startswith(a + " ") for a in _AFFIRMATIVE)
+    ):
+        facts["scheduling_confirmed"] = "yes"
+    _PT_VARIANT_HINTS = {
+        "pt-PT": ["portugal", "português de portugal", "pt-pt", "pt portugal", "portugal pt", "pt europeu", "europeu"],
+        "pt-BR": ["brasil", "brazil", "português do brasil", "pt-br", "pt brasil", "brasileiro"],
+        "pt-AO": ["angola", "angolano"],
+        "pt-MZ": ["moçambique", "mocambique", "moçambicano", "mocambicano"],
+        "pt-CV": ["cabo verde", "cabo-verdiano"],
+    }
+    for t in user_texts:
+        tl = t.lower()
+        for variant, hints in _PT_VARIANT_HINTS.items():
+            if any(h in tl for h in hints):
+                facts["language_variant"] = variant
+                break
+        if "language_variant" in facts:
+            break
+
+    # Sinaliza pedido de tradução para PT sem variante indicada — a AI deve perguntar.
+    _PT_TRANSLATION_ASK = (
+        "traduzir para portugu", "tradução para portugu", "traducao para portugu",
+        "traduzir o site para portugu", "conteúdo em portugu", "conteudo em portugu",
+        "quero em portugu", "site em portugu", "versão em portugu", "versao em portugu",
+        "quero portugu", "para portugu",
+    )
+    last_user = user_texts[-1].lower() if user_texts else ""
+    if any(k in last_user for k in _PT_TRANSLATION_ASK) and "language_variant" not in facts:
+        facts["ask_pt_variant"] = "yes"
+
+    # Já perguntámos a variante? (para não repetir)
+    for t in ai_texts:
+        tl = t.lower()
+        if "portugu" in tl and ("portugal" in tl and "brasil" in tl):
+            facts["pt_variant_asked"] = "yes"
             break
 
     # Pergunta de utilizadores/equipa foi colocada pela AI?
@@ -204,6 +247,12 @@ def format_facts_pt(facts: Dict[str, str]) -> str:
         flags.append("- ⚠️ Planos JÁ apresentados — NÃO voltar a listar (só responder a pergunta específica)")
     if facts.get("demo_link_shared") == "yes":
         flags.append("- ⚠️ Link de agendamento JÁ partilhado — NÃO insistir; só repetir se o utilizador pedir")
+    if facts.get("language_variant"):
+        flags.append(f"- 🌐 Variante PT confirmada: {facts['language_variant']} — NÃO voltar a perguntar")
+    if facts.get("pt_variant_asked") == "yes" and not facts.get("language_variant"):
+        flags.append("- 🌐 Já perguntámos a variante PT nesta conversa — se o utilizador ainda não escolheu, aguarda; NÃO voltes a perguntar.")
+    if facts.get("ask_pt_variant") == "yes" and not facts.get("language_variant") and facts.get("pt_variant_asked") != "yes":
+        flags.append("- 🌐 ⚠️ O utilizador pediu tradução para 'português' SEM variante — PERGUNTA obrigatoriamente qual pretende (Portugal, Brasil, outra) antes de avançar.")
     if not lines and not flags:
         return ""
 

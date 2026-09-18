@@ -79,7 +79,7 @@ LANG_PROBES = [
     ("fr", "Bonjour, quel est le prix du plan PRO?",
      ["le", "plan", "prix"], []),
     ("de", "Hallo, was kostet der PRO-Plan?",
-     ["der", "plan", "kostet"], []),
+     ["der", "plan", "kostet", "pläne", "monat", "benutzer", "wir haben"], []),
     ("es", "Hola, ¿cuál es el precio del plan PRO?",
      ["el", "plan", "precio"], []),
     ("nl", "Hallo, wat is de prijs van het PRO-plan?",

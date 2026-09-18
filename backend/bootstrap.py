@@ -144,23 +144,38 @@ async def _ensure_agent_with_kb(db, tenant_id: str, agent_def: dict, kb: list[di
         "data_source_ids": [source_id],
         "updated_at": _now(),
     }
+    # New per-agent behavioural fields — applied on new agents AND refreshed on
+    # non-customized agents so isolation/safety guardrails don't drift.
+    for k in ("formality", "default_pt_variant", "services", "scheduling_link",
+              "allowed_domains", "quote_form_enabled", "qualification_fields"):
+        if k in agent_def and agent_def.get(k) is not None:
+            content_patch[k] = agent_def[k]
 
     if existing:
         # Se o utilizador customizou o agente via dashboard, preservamos os
         # campos de conteúdo (prompt, icebreakers, welcome, theme, knowledge).
         # Caso contrário, sincronizamos sempre com a versão do seed.
         if existing.get("is_customized"):
-            # Apenas refresca metadados de fonte de dados (data_source_ids) +
-            # avatar (se ainda não definido). Mantém TUDO O resto definido pelo user.
+            # Preserva prompt/icebreakers/welcome/theme/knowledge customizados pelo
+            # utilizador MAS re-sincroniza SEMPRE os campos de segurança/isolamento
+            # (scheduling_link, allowed_domains, formality, default_pt_variant,
+            # services, quote_form_enabled, qualification_fields) para prevenir
+            # data leakage e drift entre agentes.
             minimal_patch = {
                 "data_source_ids": [source_id],
                 "updated_at": _now(),
             }
             if not existing.get("avatar_url"):
                 minimal_patch["avatar_url"] = agent_def.get("avatar_url", "")
+            for k in ("formality", "default_pt_variant", "services",
+                      "scheduling_link", "allowed_domains",
+                      "quote_form_enabled", "qualification_fields"):
+                if k in agent_def and agent_def.get(k) is not None:
+                    minimal_patch[k] = agent_def[k]
             await db.agents.update_one({"id": existing["id"]}, {"$set": minimal_patch})
             logger.info(
-                f"[bootstrap] agent '{name}' is_customized=true → preservadas customizações do dashboard"
+                f"[bootstrap] agent '{name}' is_customized=true → prompt preservado, "
+                f"safety fields sincronizadas (scheduling_link, allowed_domains, formality…)"
             )
         else:
             await db.agents.update_one(
@@ -375,8 +390,62 @@ async def bootstrap(db):
             "icebreakers": MARIA_ICE, "welcome_message": MARIA_WELCOME,
             "avatar_url": MARIA_AVATAR, "theme": MARIA_THEME,
             "kb_name": "Site Consenso", "kb_url": "https://consenso-shop.eu",
+            # Isolamento + configuração por agente
+            "formality": "informal",
+            "default_pt_variant": "pt-PT",
+            "services": [
+                "Agentes de IA para empresas",
+                "Chatbots personalizados (à medida)",
+                "Assistentes virtuais multilingue",
+                "Planos e subscrições Consenso Plus (Starter, Pro, Enterprise)",
+                "Consultoria de implementação e integração",
+                "Setores: Imobiliário, Hotelaria, Turismo, Empresas de Serviços",
+            ],
+            "scheduling_link": "https://consenso-shop.eu/marcar-reuniao",
+            "allowed_domains": [
+                "consenso-shop.eu",
+                "consenso-agents.com",
+                "consenso-plus.com",
+            ],
+            "quote_form_enabled": True,
+            "qualification_fields": ["name", "company", "email", "service", "need"],
         }, MARIA_KB, demo_items=MARIA_DEMO)
     await _safe_seed("Maria — Assistente IA Consenso Plus", _seed_maria)
+
+    # ------- Clara — Consenso Global (institutional, formal PT-PT) -------
+    async def _seed_clara():
+        from seed_clara import (
+            AGENT_NAME as CLARA_NAME, SYSTEM_PROMPT as CLARA_PROMPT,
+            ICEBREAKERS as CLARA_ICE, WELCOME_MESSAGE as CLARA_WELCOME,
+            AVATAR_URL as CLARA_AVATAR, THEME as CLARA_THEME,
+            KNOWLEDGE_CHUNKS as CLARA_KB,
+            SCHEDULING_LINK as CLARA_LINK, ALLOWED_DOMAINS as CLARA_DOMAINS,
+        )
+        await _ensure_agent_with_kb(db, tenant_id, {
+            "name": CLARA_NAME,
+            "role": "Assistente Institucional — Consenso Global (SEO, Localização, Copywriting Multilingue, Consultoria)",
+            "goal": "Apresentar a Consenso Global, qualificar contactos B2B para SEO Multilingue, Localização e Consultoria, encaminhar para reunião via calendário Pipedrive oficial.",
+            "system_prompt": CLARA_PROMPT,
+            "icebreakers": CLARA_ICE, "welcome_message": CLARA_WELCOME,
+            "avatar_url": CLARA_AVATAR, "theme": CLARA_THEME,
+            "kb_name": "Site Consenso Global", "kb_url": "https://consensoglobal.com",
+            # Isolamento + configuração por agente
+            "formality": "formal",
+            "default_pt_variant": "pt-PT",
+            "services": [
+                "SEO Multilingue",
+                "Localização de Websites",
+                "Copywriting Multilingue",
+                "Conteúdos Corporativos",
+                "Consultoria em Comunicação Internacional",
+                "Gestão de Reputação e Presença Digital",
+            ],
+            "scheduling_link": CLARA_LINK,
+            "allowed_domains": CLARA_DOMAINS,
+            "quote_form_enabled": True,
+            "qualification_fields": ["name", "company", "email", "service", "need"],
+        }, CLARA_KB)
+    await _safe_seed("Clara — Assistente Consenso Global", _seed_clara)
 
     # ------- StayLocal -------
     async def _seed_staylocal():

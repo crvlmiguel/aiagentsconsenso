@@ -5,6 +5,9 @@ Objectivos:
 2. Filtrar URLs — apenas domínios da whitelist do agente (se definida)
 3. Substituir URLs de agendamento inventados pelo link oficial do agente
 4. Detectar respostas duplicadas (mesma pergunta repetida ao utilizador)
+5. Enforcar linguagem neutra em género (remover "ajudá-lo", "-la", "interessado", etc.)
+6. Injectar pergunta de variante PT quando o utilizador pede tradução para "português"
+7. Enforcar o link oficial de agendamento (substituir qualquer scheduler inventado)
 """
 import logging
 import re
@@ -116,17 +119,21 @@ def ensure_scheduling_link(
     follow_up: str,
     user_text: str,
     scheduling_link: Optional[str],
+    facts: Optional[Dict] = None,
 ) -> tuple[str, str]:
-    """Se o utilizador expressou intenção de agendamento E o agente tem um
-    `scheduling_link` configurado, garante que ele aparece na resposta.
+    """Se o utilizador expressou intenção de agendamento (na mensagem actual OU
+    via `facts.scheduling_confirmed`) E o agente tem um `scheduling_link`
+    configurado, garante que ele aparece na resposta.
     - Se já está lá: mantém.
     - Se falta: adiciona-o no `follow_up` (ou no `reply` se follow_up estiver vazio)."""
-    if not scheduling_link or not has_scheduling_intent(user_text):
+    if not scheduling_link:
+        return reply, follow_up
+    triggered = has_scheduling_intent(user_text) or (facts or {}).get("scheduling_confirmed") == "yes"
+    if not triggered:
         return reply, follow_up
     combined = f"{reply} {follow_up}"
     if scheduling_link in combined:
         return reply, follow_up
-    # Injecta no follow_up (mais discreto que reescrever o reply)
     if not follow_up.strip():
         follow_up = f"Pode consultar horários e agendar aqui: {scheduling_link}"
     else:
@@ -207,6 +214,147 @@ def scrub_repeated_questions(reply: str, follow_up: str, facts: Dict) -> tuple[s
 
 
 # ============ Post-process principal ============
+# --- Linguagem neutra em género ---------------------------------------------
+# Substituições determinísticas na saída da IA. As chaves devem manter capitalização
+# porque o sistema aplica ambos (case-sensitive) para não estragar frases começadas
+# em maiúscula.
+_GENDER_NEUTRAL_MAP = {
+    # ajudá-lo/la
+    "ajudá-lo": "ajudar",
+    "ajudá-la": "ajudar",
+    "ajuda-lo": "ajudar",
+    "ajuda-la": "ajudar",
+    "ajudá-los": "ajudar",
+    "ajudá-las": "ajudar",
+    # apoiá-lo/la
+    "apoiá-lo": "apoiar",
+    "apoiá-la": "apoiar",
+    "apoia-lo": "apoiar",
+    "apoia-la": "apoiar",
+    "apoiá-los": "apoiar",
+    "apoiá-las": "apoiar",
+    # recebê-lo/la
+    "recebê-lo": "receber",
+    "recebê-la": "receber",
+    "recebe-lo": "receber",
+    "recebe-la": "receber",
+    # atendê-lo
+    "atendê-lo": "atender",
+    "atendê-la": "atender",
+    # contactá-lo/la
+    "contactá-lo": "contactar",
+    "contactá-la": "contactar",
+    # senhor / senhora automáticos
+    "o senhor": "",
+    "a senhora": "",
+    "caro senhor": "olá",
+    "cara senhora": "olá",
+    # Está interessado? → Tem interesse?
+    "está interessado": "tem interesse",
+    "esta interessado": "tem interesse",
+    "está interessada": "tem interesse",
+    "esta interessada": "tem interesse",
+    # bem-vindo/a
+    "seja bem-vindo": "boas-vindas",
+    "seja bem-vinda": "boas-vindas",
+    # obrigado por contactar-nos
+    "obrigado por contactar-nos": "obrigado pelo contacto",
+    "obrigada por contactar-nos": "obrigado pelo contacto",
+}
+
+
+def apply_gender_neutral(text: str) -> str:
+    """Substitui expressões gendradas por formas neutras. Case-insensitive
+    mas preserva capitalização inicial das frases."""
+    if not text:
+        return text
+    out = text
+    for k, v in _GENDER_NEUTRAL_MAP.items():
+        # Case-insensitive replace preserving the first-letter case
+        pattern = re.compile(re.escape(k), re.IGNORECASE)
+
+        def _repl(m, v=v):
+            match = m.group(0)
+            if not v:
+                return ""
+            # Preserve capitalization
+            if match[0].isupper():
+                return v[0].upper() + v[1:]
+            return v
+
+        out = pattern.sub(_repl, out)
+    # Cleanup any double spaces / stray commas produced by removals
+    out = re.sub(r"\s{2,}", " ", out)
+    out = re.sub(r"\s+([.,;!?])", r"\1", out)
+    out = re.sub(r"([,])\s*,", r"\1", out)
+    return out.strip()
+
+
+# --- Enforce scheduling link (substitui links inventados) -------------------
+_SCHEDULING_PATTERNS = [
+    r"https?://calendly\.com/[^\s\]\)\}\>\"'`]+",
+    r"https?://cal\.com/[^\s\]\)\}\>\"'`]+",
+    r"https?://calendar\.google\.com/[^\s\]\)\}\>\"'`]+",
+    r"https?://[^\s]*/marcar[^\s\]\)\}\>\"'`]*",
+    r"https?://[^\s]*/agendar[^\s\]\)\}\>\"'`]*",
+    r"https?://[^\s]*/scheduler/[^\s\]\)\}\>\"'`]*",
+    r"https?://[^\s]*/agende[^\s\]\)\}\>\"'`]*",
+]
+
+
+def enforce_scheduling_link(text: str, scheduling_link: Optional[str]) -> str:
+    """Substitui QUALQUER URL parecido com um agendador pelo link oficial do
+    agente. Se scheduling_link estiver vazio, remove-os por completo (evita
+    hallucination) e adiciona nota discreta."""
+    if not text:
+        return text
+    modified = text
+    replaced = False
+    for pat in _SCHEDULING_PATTERNS:
+        def _repl(m):
+            nonlocal replaced
+            url = m.group(0)
+            if scheduling_link and scheduling_link in url:
+                return url
+            replaced = True
+            return scheduling_link or ""
+        modified = re.sub(pat, _repl, modified, flags=re.IGNORECASE)
+    if replaced:
+        logger.info(f"[scheduling-guard] replaced hallucinated scheduler with '{scheduling_link}'")
+        modified = re.sub(r"\s{2,}", " ", modified).strip()
+    return modified
+
+
+# --- Injectar pergunta de variante PT --------------------------------------
+_PT_VARIANT_QUESTION = (
+    "Antes de avançar: pretende português de Portugal, português do Brasil ou outra variante?"
+)
+
+
+def ensure_pt_variant_question(reply: str, follow_up: str, facts: Dict) -> tuple[str, str]:
+    """Se o utilizador pediu tradução para 'português' sem indicar variante,
+    o guard reforça a pergunta caso a AI se tenha esquecido."""
+    if facts.get("ask_pt_variant") != "yes":
+        return reply, follow_up
+    if facts.get("language_variant") or facts.get("pt_variant_asked") == "yes":
+        return reply, follow_up
+    combined_low = (reply + " " + (follow_up or "")).lower()
+    already_asked = (
+        "portugal" in combined_low and "brasil" in combined_low
+        and ("variante" in combined_low or "outra" in combined_low or "prefere" in combined_low or "pretende" in combined_low)
+    )
+    if already_asked:
+        return reply, follow_up
+    # Injectar a pergunta ANTES do resto — é a informação crítica para desbloquear
+    logger.info("[pt-variant-guard] injected variant question")
+    if not reply.strip():
+        reply = _PT_VARIANT_QUESTION
+    else:
+        reply = f"{_PT_VARIANT_QUESTION} {reply}"
+    return reply, follow_up
+
+
+# ============ Post-process principal ============
 def apply_guardrails(
     reply: str,
     follow_up: str,
@@ -214,11 +362,19 @@ def apply_guardrails(
     user_text: str,
     allowed_domains: Optional[List[str]] = None,
     scheduling_link: Optional[str] = None,
+    formality: str = "informal",
 ) -> tuple[str, str]:
     """Corre TODAS as verificações em ordem — chamado no fim de generate_response."""
     reply, follow_up = scrub_repeated_questions(reply or "", follow_up or "", facts)
+    reply, follow_up = ensure_pt_variant_question(reply, follow_up, facts)
+    # Linguagem neutra em género — aplicar sempre (formal ou informal)
+    reply = apply_gender_neutral(reply)
+    follow_up = apply_gender_neutral(follow_up)
+    # Enforce scheduling link antes do whitelist (pode substituir por scheduling_link)
+    reply = enforce_scheduling_link(reply, scheduling_link)
+    follow_up = enforce_scheduling_link(follow_up, scheduling_link)
     if allowed_domains:
         reply = filter_urls_by_whitelist(reply, allowed_domains, scheduling_link)
         follow_up = filter_urls_by_whitelist(follow_up, allowed_domains, scheduling_link)
-    reply, follow_up = ensure_scheduling_link(reply, follow_up, user_text, scheduling_link)
+    reply, follow_up = ensure_scheduling_link(reply, follow_up, user_text, scheduling_link, facts=facts)
     return reply, follow_up

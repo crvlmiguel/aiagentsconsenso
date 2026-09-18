@@ -86,6 +86,12 @@ class Agent(BaseModel):
     # Isolamento e segurança:
     scheduling_link: str = ""              # URL oficial de agendamento (Pipedrive, Calendly, etc.)
     allowed_domains: List[str] = Field(default_factory=list)  # whitelist para URLs em respostas
+    # Configuração conversacional por agente:
+    formality: Literal["formal", "informal"] = "informal"     # formal = "você" · informal = "tu"
+    default_pt_variant: Literal["pt-PT", "pt-BR", ""] = ""    # variante PT preferida ("" = perguntar)
+    services: List[str] = Field(default_factory=list)         # oferta do agente ("SEO", "Agentes IA", ...)
+    quote_form_enabled: bool = False                          # activa fluxo de orçamento
+    qualification_fields: List[str] = Field(default_factory=lambda: ["name", "email", "service", "need"])
     active: bool = True
     created_at: str = Field(default_factory=now_iso)
 
@@ -113,6 +119,11 @@ class AgentInput(BaseModel):
     theme: Dict[str, Any] = Field(default_factory=dict)
     scheduling_link: str = ""
     allowed_domains: List[str] = Field(default_factory=list)
+    formality: str = "informal"
+    default_pt_variant: str = ""
+    services: List[str] = Field(default_factory=list)
+    quote_form_enabled: bool = False
+    qualification_fields: List[str] = Field(default_factory=lambda: ["name", "email", "service", "need"])
     active: bool = True
 
 
